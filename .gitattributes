@@ -1,2 +1,2 @@
-# Auto detect text files and perform LF normalization
+# Храним текстовые файлы в Git с переносами строк LF
 * text=auto
