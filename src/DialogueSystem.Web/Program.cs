@@ -14,6 +14,16 @@ var connection = new SqliteConnectionStringBuilder
 builder.Services.AddDbContext<DialogueDbContext>(options => options.UseSqlite(connection.ToString()));
 
 var app = builder.Build();
+await using (var scope = app.Services.CreateAsyncScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<DialogueDbContext>();
+    await db.Database.MigrateAsync();
+
+    if (app.Environment.IsDevelopment() && app.Configuration.GetValue("DialogueSystem:SeedDemo", true))
+    {
+        await DemoDialogue.SeedAsync(db);
+    }
+}
 
 app.MapGet("/", () => "Сервер диалогов запущен.");
 

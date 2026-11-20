@@ -2,4 +2,7 @@
   <Folder Name="/src/">
     <Project Path="src/DialogueSystem.Web/DialogueSystem.Web.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/DialogueSystem.Tests/DialogueSystem.Tests.csproj" />
+  </Folder>
 </Solution>
