@@ -55,9 +55,42 @@ public sealed class DialoguesController(DialogueDbContext db) : ControllerBase
     [HttpGet("{id:int}/lines/{lineId:int}/context")]
     public async Task<ActionResult<LineContext>> Context(int id, int lineId, CancellationToken cancellationToken)
     {
-        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        var graph = await DialogueGraphLoader.LoadAsync(db, id, cancellationToken);
-        return graph?.GetContext(lineId) is { } context ? Ok(context) : NotFound();
+        var neighbors =
+            from choice in db.Choices
+            where choice.DialogueId == id && (choice.SourceLineId == lineId || choice.TargetLineId == lineId)
+            let neighborId = choice.SourceLineId == lineId ? choice.TargetLineId : choice.SourceLineId
+            join neighbor in db.Lines
+                on new { choice.DialogueId, Id = neighborId } equals new { neighbor.DialogueId, neighbor.Id }
+            select new
+            {
+                choice.DialogueId,
+                choice.SourceLineId,
+                choice.TargetLineId,
+                Link = new ChoiceLink(choice.Id, choice.Text, choice.Position,
+                    new LineSummary(neighbor.Id, neighbor.Speaker.Name, neighbor.Text,
+                        neighbor.IsEnding, neighbor.IsStoryBranch, neighbor.SpeakerId))
+            };
+
+        var context = await db.Lines.AsSingleQuery()
+            .Where(line => line.DialogueId == id && line.Id == lineId)
+            .Select(line => new
+            {
+                Line = new LineSummary(line.Id, line.Speaker.Name, line.Text,
+                    line.IsEnding, line.IsStoryBranch, line.SpeakerId),
+                Neighbors = neighbors.Where(item => item.DialogueId == line.DialogueId).ToList()
+            })
+            .SingleOrDefaultAsync(cancellationToken);
+        if (context is null)
+        {
+            return NotFound();
+        }
+
+        var incoming = context.Neighbors.Where(item => item.TargetLineId == lineId)
+            .OrderBy(item => item.SourceLineId).ThenBy(item => item.Link.Position)
+            .Select(item => item.Link).ToArray();
+        var outgoing = context.Neighbors.Where(item => item.SourceLineId == lineId)
+            .OrderBy(item => item.Link.Position).Select(item => item.Link).ToArray();
+        return Ok(new LineContext(context.Line, incoming, outgoing));
     }
 
     [HttpGet("{id:int}/story-branches")]

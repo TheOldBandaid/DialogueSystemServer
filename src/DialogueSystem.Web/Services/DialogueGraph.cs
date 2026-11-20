@@ -12,16 +12,6 @@ internal sealed class DialogueGraph(Dialogue dialogue, IReadOnlyList<DialogueCho
         choices.OrderBy(choice => choice.SourceLineId).ThenBy(choice => choice.Position)
             .ToLookup(choice => choice.TargetLineId);
 
-    public LineContext? GetContext(int lineId)
-    {
-        return _lines.TryGetValue(lineId, out var line)
-            ? new LineContext(
-                Summarize(line),
-                _incoming[lineId].Select(choice => Link(choice, choice.SourceLineId)).ToArray(),
-                _outgoing[lineId].Select(choice => Link(choice, choice.TargetLineId)).ToArray())
-            : null;
-    }
-
     public IReadOnlyList<LineSummary> GetStoryBranches() =>
         _lines.Values.Where(line => line.IsStoryBranch).OrderBy(line => line.Id).Select(Summarize).ToArray();
 
@@ -79,9 +69,6 @@ internal sealed class DialogueGraph(Dialogue dialogue, IReadOnlyList<DialogueCho
         var choices = _outgoing[line.Id].Select(choice => new PreviewChoice(choice.Id, choice.Text)).ToArray();
         return new PreviewStep(preview.Id, preview.Step, Summarize(line), choices, unreachableLineIds);
     }
-
-    private ChoiceLink Link(DialogueChoice choice, int lineId) =>
-        new(choice.Id, choice.Text, choice.Position, Summarize(_lines[lineId]));
 
     private static LineSummary Summarize(DialogueLine line) =>
         new(line.Id, line.Speaker.Name, line.Text, line.IsEnding, line.IsStoryBranch, line.SpeakerId);

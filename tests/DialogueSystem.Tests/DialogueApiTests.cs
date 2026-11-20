@@ -196,6 +196,37 @@ public sealed class DialogueApiTests
         }
     }
 
+    [Fact]
+    public async Task ShowsBothDirectionsOfSelfLoopAndOrdersContextChoices()
+    {
+        using var data = new DialogueTestData();
+        await using var app = Start(data);
+        using var editor = new DialogueApiClient(app);
+        await editor.Login("editor", editorPassword);
+
+        var demo = Assert.Single(await editor.Get<DialogueSummary[]>("/api/dialogues"));
+        var path = $"/api/dialogues/{demo.Id}";
+        var branch = Assert.Single(await editor.Get<LineSummary[]>($"{path}/story-branches"));
+        var startId = Assert.IsType<int>(demo.StartLineId);
+        var contextPath = $"{path}/lines/{branch.Id}/context";
+        var original = await editor.Get<LineContext>(contextPath);
+
+        var extra = await editor.Read<DialogueChoice>(HttpMethod.Post, $"{path}/lines/{startId}/choices",
+            Created, new { text = "Расскажите ещё", targetLineId = branch.Id, position = 3 });
+        var loop = await editor.Read<DialogueChoice>(HttpMethod.Post, $"{path}/lines/{branch.Id}/choices",
+            Created, new { text = "Повторить вопрос", targetLineId = branch.Id, position = 3 });
+        var context = await editor.Get<LineContext>(contextPath);
+
+        var expectedIncoming = original.Incoming.Select(choice => (Id: choice.Line.Id, choice.Position))
+            .Append((Id: startId, extra.Position)).Append((Id: branch.Id, loop.Position))
+            .OrderBy(choice => choice.Id).ThenBy(choice => choice.Position);
+        Assert.Equal(expectedIncoming, context.Incoming.Select(choice => (choice.Line.Id, choice.Position)));
+        Assert.Equal(new[] { 1, 2, 3 }, context.Outgoing.Select(choice => choice.Position));
+        Assert.Equal(branch, Assert.Single(context.Incoming, choice => choice.Id == loop.Id).Line);
+        Assert.Equal(branch, Assert.Single(context.Outgoing, choice => choice.Id == loop.Id).Line);
+        await editor.Expect(NotFound, HttpMethod.Get, $"/api/dialogues/0/lines/{branch.Id}/context");
+    }
+
     private WebApplicationFactory<DialogueDbContext> Start(DialogueTestData data) =>
         data.Start(Environments.Development,
             new("DialogueSystem:AdminPassword", adminPassword), new("DialogueSystem:EditorPassword", editorPassword));
