@@ -9,12 +9,15 @@ public sealed class DialogueDbContext(DbContextOptions<DialogueDbContext> option
     public DbSet<Dialogue> Dialogues => Set<Dialogue>();
     public DbSet<DialogueLine> Lines => Set<DialogueLine>();
     public DbSet<DialogueChoice> Choices => Set<DialogueChoice>();
+    public DbSet<DialoguePreview> Previews => Set<DialoguePreview>();
     public DbSet<Account> Accounts => Set<Account>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Dialogue>().Property(dialogue => dialogue.Id).ValueGeneratedOnAdd();
         modelBuilder.Entity<Account>().HasIndex(account => account.Login).IsUnique();
+        modelBuilder.Entity<DialoguePreview>().HasOne<Account>().WithMany()
+            .HasForeignKey(preview => preview.UserId);
         modelBuilder.Entity<DialogueLine>().HasAlternateKey(line => new { line.DialogueId, line.Id });
         modelBuilder.Entity<DialogueLine>()
             .HasOne(line => line.Speaker).WithMany()
@@ -39,5 +42,10 @@ public sealed class DialogueDbContext(DbContextOptions<DialogueDbContext> option
         modelBuilder.Entity<DialogueChoice>()
             .HasIndex(choice => new { choice.DialogueId, choice.SourceLineId, choice.Position })
             .IsUnique();
+        modelBuilder.Entity<DialoguePreview>()
+            .HasOne<DialogueLine>().WithMany()
+            .HasPrincipalKey(line => new { line.DialogueId, line.Id })
+            .HasForeignKey(preview => new { preview.DialogueId, preview.CurrentLineId })
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }

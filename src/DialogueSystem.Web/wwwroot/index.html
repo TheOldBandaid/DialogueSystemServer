@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Редактор диалогов</title>
+  <link rel="stylesheet" href="/editor.css">
+  <script type="module" src="/editor.js"></script>
+</head>
+<body>
+  <header><h1>Редактор диалогов</h1><button id="logout" hidden>Выйти</button></header>
+  <main>
+    <p id="status" role="status"></p>
+    <form id="login" hidden>
+      <label>Имя пользователя <input name="login" autocomplete="username" required></label>
+      <label>Пароль <input name="password" type="password" autocomplete="current-password" required></label>
+      <button>Войти</button>
+    </form>
+    <div id="workspace" hidden>
+      <nav aria-label="Рабочая область">
+        <a href="#dialogue">Диалог</a><a href="#preview">Предпросмотр</a>
+      </nav>
+      <label>Диалог <select id="dialogues"></select></label>
+      <details>
+        <summary>Создать диалог или персонажа</summary>
+        <div class="columns">
+          <form id="new-dialogue">
+            <label>Название диалога <input name="title" maxlength="160" required></label>
+            <button>Создать диалог</button>
+          </form>
+          <form id="new-character">
+            <label>Имя персонажа <input name="name" maxlength="120" required></label>
+            <button>Создать персонажа</button>
+          </form>
+        </div>
+      </details>
+      <section id="dialogue">
+        <div class="columns">
+          <aside>
+            <h2>Сюжетные развилки</h2>
+            <ul id="branches"></ul>
+            <h2>Реплики</h2>
+            <ul id="lines"></ul>
+            <button id="new-line">Добавить реплику</button>
+          </aside>
+          <div>
+            <h2 id="line-heading">Реплика</h2>
+            <form id="line-form">
+              <label>Говорящий <select name="speakerId" required></select></label>
+              <label>Текст <textarea name="text" rows="4" maxlength="4000" required></textarea></label>
+              <label class="check"><input name="isEnding" type="checkbox"> Концовка</label>
+              <label class="check"><input name="isStoryBranch" type="checkbox"> Сюжетная развилка</label>
+              <div class="actions">
+                <button>Сохранить реплику</button>
+                <button type="button" id="set-start">Назначить стартом</button>
+                <button type="button" id="clear-start">Снять отметку старта</button>
+                <button type="button" id="delete-line">Удалить реплику</button>
+              </div>
+            </form>
+            <div id="context" hidden>
+              <h3>Входящие переходы</h3>
+              <ul id="incoming"></ul>
+              <h3>Варианты ответа</h3>
+              <div id="choices"></div>
+              <button id="new-choice">Добавить вариант</button>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section id="preview">
+        <h2>Предпросмотр</h2>
+        <button id="start-preview">Начать с первой реплики</button>
+        <div id="preview-step" aria-live="polite"></div>
+      </section>
+    </div>
+  </main>
+</body>
+</html>
