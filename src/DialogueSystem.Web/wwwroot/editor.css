@@ -1,0 +1,22 @@
+:root { font-family: system-ui, sans-serif; color: #17232c; background: #f4f6f5; }
+body { margin: 0 auto; max-width: 72rem; padding: 1.25rem; }
+header, .actions, nav { display: flex; flex-wrap: wrap; gap: .65rem; align-items: center; }
+header { justify-content: space-between; border-bottom: 1px solid #c6d0ca; }
+h1 { margin: .5rem 0 1rem; }
+h2 { margin: 0 0 .8rem; font-size: 1.25rem; }
+section, #login { background: white; border: 1px solid #c6d0ca; padding: 1rem; margin-top: 1rem; }
+#login { max-width: 24rem; }
+.columns { display: grid; grid-template-columns: minmax(12rem, 1fr) minmax(0, 2.6fr); gap: 1.5rem; }
+form, label { display: grid; gap: .4rem; margin-bottom: .65rem; }
+label.check { display: flex; align-items: center; }
+input, select, textarea, button { font: inherit; padding: .45rem; max-width: 100%; }
+button { cursor: pointer; color: #173d32; background: #e5f1eb; border: 1px solid #759686; border-radius: .2rem; }
+button:disabled { cursor: default; opacity: .65; }
+a { color: #195b49; }
+ul { padding-left: 1.25rem; }
+li { margin-bottom: .4rem; overflow-wrap: anywhere; }
+.choice { border-top: 1px solid #d6dfdb; padding-top: .75rem; }
+#status { color: #8a3120; overflow-wrap: anywhere; }
+#dialogues { width: min(100%, 30rem); }
+[hidden] { display: none !important; }
+@media (max-width: 680px) { .columns { grid-template-columns: 1fr; } }

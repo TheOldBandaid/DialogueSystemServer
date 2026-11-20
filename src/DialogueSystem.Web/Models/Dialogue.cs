@@ -36,6 +36,15 @@ public sealed class DialogueChoice
     public int Position { get; set; }
 }
 
+public sealed class DialoguePreview
+{
+    public Guid Id { get; set; }
+    public int UserId { get; set; }
+    public int DialogueId { get; set; }
+    public int CurrentLineId { get; set; }
+    public int Step { get; set; }
+}
+
 public sealed class Account
 {
     public int Id { get; set; }

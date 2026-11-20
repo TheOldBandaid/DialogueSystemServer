@@ -51,6 +51,7 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
 builder.Services.AddAuthorization();
 builder.Services.AddAntiforgery(options => options.HeaderName = "X-CSRF-TOKEN");
 builder.Services.AddControllersWithViews();
+builder.Services.AddOpenApi();
 
 var app = builder.Build();
 await using (var scope = app.Services.CreateAsyncScope())
@@ -88,9 +89,14 @@ await using (var scope = app.Services.CreateAsyncScope())
     }
 }
 
+app.UseDefaultFiles();
+app.UseStaticFiles();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();
-app.MapGet("/", () => "Сервер диалогов запущен.");
+if (app.Environment.IsDevelopment())
+{
+    app.MapOpenApi();
+}
 
 app.Run();
