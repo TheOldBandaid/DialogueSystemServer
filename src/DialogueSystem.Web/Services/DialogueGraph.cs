@@ -15,6 +15,15 @@ internal sealed class DialogueGraph(Dialogue dialogue, IReadOnlyList<DialogueCho
     public IReadOnlyList<LineSummary> GetStoryBranches() =>
         _lines.Values.Where(line => line.IsStoryBranch).OrderBy(line => line.Id).Select(Summarize).ToArray();
 
+    public DialogueDocument ToDocument() => new(
+        1, dialogue.Title, dialogue.StartLineId,
+        _lines.Values.OrderBy(line => line.Id)
+            .Select(line => new DialogueDocumentLine(
+                line.Id, line.Speaker.Name, line.Text, line.IsEnding, line.IsStoryBranch)).ToArray(),
+        choices.OrderBy(choice => choice.SourceLineId).ThenBy(choice => choice.Position)
+            .Select(choice => new DialogueDocumentChoice(
+                choice.SourceLineId, choice.TargetLineId, choice.Text, choice.Position)).ToArray());
+
     public DialogueValidation Validate()
     {
         var errors = new List<string>();

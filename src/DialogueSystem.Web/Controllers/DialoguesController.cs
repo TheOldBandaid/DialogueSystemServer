@@ -50,6 +50,21 @@ public sealed class DialoguesController(DialogueDbContext db) : ControllerBase
         return NoContent();
     }
 
+    [HttpGet("{id:int}/export")]
+    public async Task<ActionResult<DialogueDocument>> Export(int id, CancellationToken cancellationToken)
+    {
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        var graph = await DialogueGraphLoader.LoadAsync(db, id, cancellationToken);
+        return graph is null ? NotFound() : Ok(graph.ToDocument());
+    }
+
+    [HttpPost("import")]
+    public async Task<ActionResult<DialogueSummary>> Import(DialogueDocument document, CancellationToken cancellationToken)
+    {
+        var created = await DialogueImporter.SaveAsync(db, document, cancellationToken);
+        return CreatedAtAction(nameof(Get), new { id = created.Id }, created);
+    }
+
     public sealed record DialogueInput([Required, StringLength(160)] string Title);
 
     [HttpGet("{id:int}/lines/{lineId:int}/context")]

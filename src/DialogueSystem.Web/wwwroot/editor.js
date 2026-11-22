@@ -185,6 +185,13 @@ async function openWorkspace(preferredDialogueId) {
   await loadDialogue(Number(byId("dialogues").value));
 }
 
+async function importDialogue(data) {
+  const created = await api("/api/dialogues/import", "POST", data);
+  byId("preview-step").replaceChildren();
+  await openWorkspace(created.id);
+  return created;
+}
+
 function renderStep(step) {
   const host = byId("preview-step");
   const text = document.createElement("p");
@@ -226,6 +233,38 @@ byId("new-dialogue").onsubmit = run(async event => {
   form.reset();
   byId("preview-step").replaceChildren();
   await openWorkspace(dialogue.id);
+});
+byId("import-dialogue").onsubmit = run(async event => {
+  const form = event.currentTarget;
+  const raw = await form.elements.file.files[0].text();
+  let data;
+  try {
+    data = JSON.parse(raw.replace(/^\uFEFF/, ""));
+  } catch (error) {
+    if (!(error instanceof SyntaxError)) throw error;
+    throw new Error("Не удалось прочитать JSON. Проверьте содержимое файла.");
+  }
+  const created = await importDialogue(data);
+  form.reset();
+  byId("status").textContent = `Диалог «${created.title}» загружен.`;
+});
+byId("copy-dialogue").onclick = run(async () => {
+  const data = await api(`${path()}/export`);
+  const suffix = " (копия)";
+  const title = data.title.length <= 160 - suffix.length ? data.title + suffix : "Копия диалога";
+  const created = await importDialogue({ ...data, title });
+  byId("status").textContent = `Создана копия «${created.title}».`;
+});
+byId("export-dialogue").onclick = run(async () => {
+  const id = state.dialogue.id;
+  const data = await api(`${path()}/export`);
+  const file = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(file);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `dialogue-${id}.json`;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 });
 byId("new-character").onsubmit = run(async event => {
   const form = event.currentTarget;

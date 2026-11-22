@@ -34,7 +34,18 @@
           </form>
         </div>
       </details>
+      <details>
+        <summary>Импорт диалога</summary>
+        <form id="import-dialogue">
+          <label>Файл JSON <input name="file" type="file" accept=".json,application/json" required></label>
+          <button>Загрузить диалог</button>
+        </form>
+      </details>
       <section id="dialogue">
+        <div class="actions dialogue-actions">
+          <button type="button" id="copy-dialogue">Копировать диалог</button>
+          <button type="button" id="export-dialogue">Скачать JSON</button>
+        </div>
         <div class="columns">
           <aside>
             <h2>Сюжетные развилки</h2>

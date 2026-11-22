@@ -18,5 +18,6 @@ li { margin-bottom: .4rem; overflow-wrap: anywhere; }
 .choice { border-top: 1px solid #d6dfdb; padding-top: .75rem; }
 #status { color: #8a3120; overflow-wrap: anywhere; }
 #dialogues { width: min(100%, 30rem); }
+.dialogue-actions { margin-bottom: 1rem; }
 [hidden] { display: none !important; }
 @media (max-width: 680px) { .columns { grid-template-columns: 1fr; } }
