@@ -263,10 +263,14 @@ async function openWorkspace(preferredDialogueId) {
   await loadDialogue(Number(byId("dialogues").value));
 }
 
+async function openNewDialogue(dialogue) {
+  byId("preview-step").replaceChildren();
+  await openWorkspace(dialogue.id);
+}
+
 async function importDialogue(data) {
   const created = await api("/api/dialogues/import", "POST", data);
-  byId("preview-step").replaceChildren();
-  await openWorkspace(created.id);
+  await openNewDialogue(created);
   return created;
 }
 
@@ -423,6 +427,11 @@ byId("new-dialogue").onsubmit = run(async event => {
   form.reset();
   byId("preview-step").replaceChildren();
   await openWorkspace(dialogue.id);
+});
+byId("add-rooftop-date").onclick = run(async () => {
+  const dialogue = await api("/api/dialogues/examples/rooftop-date", "POST");
+  await openNewDialogue(dialogue);
+  byId("status").textContent = `Пример «${dialogue.title}» добавлен.`;
 });
 byId("import-dialogue").onsubmit = run(async event => {
   const form = event.currentTarget;

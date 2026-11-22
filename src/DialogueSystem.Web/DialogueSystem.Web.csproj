@@ -12,4 +12,7 @@
     </PackageReference>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="10.0.12" />
   </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="../../examples/rooftop-date.json" LogicalName="DialogueSystem.Web.Demos.RooftopDate.json" />
+  </ItemGroup>
 </Project>

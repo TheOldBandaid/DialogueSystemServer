@@ -130,7 +130,7 @@ public sealed class DialogueStoryStateTests
 
     private static async Task<DialogueDocument> LoadExample()
     {
-        var filename = Path.Combine(AppContext.BaseDirectory, "examples", "duty-signal.json");
+        var filename = Path.Combine(AppContext.BaseDirectory, "Fixtures", "duty-signal.json");
         await using var file = File.OpenRead(filename);
         return (await JsonSerializer.DeserializeAsync<DialogueDocument>(file, JsonSerializerOptions.Web))!;
     }

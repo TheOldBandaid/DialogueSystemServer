@@ -1,3 +1,4 @@
+using System.Text.Json;
 using DialogueSystem.Web.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -5,6 +6,18 @@ namespace DialogueSystem.Web.Data;
 
 internal static class DemoDialogue
 {
+    public static async Task<DialogueSummary> AddRooftopDateAsync(
+        DialogueDbContext db, CancellationToken cancellationToken)
+    {
+        await using var resource = typeof(DemoDialogue).Assembly
+            .GetManifestResourceStream("DialogueSystem.Web.Demos.RooftopDate.json")
+            ?? throw new InvalidOperationException("Файл примера «Кино после патруля» отсутствует.");
+        var document = await JsonSerializer.DeserializeAsync<DialogueDocument>(
+            resource, JsonSerializerOptions.Web, cancellationToken)
+            ?? throw new InvalidOperationException("Не удалось прочитать пример «Кино после патруля».");
+        return await DialogueImporter.SaveAsync(db, document, cancellationToken);
+    }
+
     public static async Task SeedAsync(DialogueDbContext db, CancellationToken cancellationToken = default)
     {
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
