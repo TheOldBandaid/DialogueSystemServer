@@ -51,6 +51,10 @@ public sealed class DialogueApiTests
         using var secondReply = replies[1];
         Assert.Equal(new[] { OK, Conflict }, replies.Select(reply => reply.StatusCode).Order());
         current = await DialogueApiClient.ReadBody<PreviewStep>(Assert.Single(replies, reply => reply.StatusCode == OK));
+        var history = await editor.Get<PreviewHistory>($"{path}/previews/{current.PreviewId}/history");
+        Assert.Equal(1, history.CurrentStep);
+        Assert.Equal(new[] { 0, 1 }, history.Steps.Select(step => step.Step));
+        Assert.Equal(current.Line.Id, history.Steps[1].LineId);
 
         if (firstChoice == 0)
         {

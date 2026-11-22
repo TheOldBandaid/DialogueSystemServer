@@ -107,6 +107,15 @@
           <button id="start-preview">Начать с первой реплики</button>
         </form>
         <div id="preview-step" aria-live="polite"></div>
+        <details id="preview-history">
+          <summary>История прохождений</summary>
+          <div class="actions">
+            <label>Сеанс <select id="preview-sessions" disabled></select></label>
+            <button id="refresh-preview-history" type="button">Обновить историю</button>
+          </div>
+          <p id="preview-history-message" role="status"></p>
+          <ol id="preview-history-steps"></ol>
+        </details>
       </section>
     </div>
   </main>

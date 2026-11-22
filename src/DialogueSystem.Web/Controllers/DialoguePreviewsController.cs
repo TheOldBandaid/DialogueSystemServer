@@ -14,6 +14,27 @@ namespace DialogueSystem.Web.Controllers;
 [Route("api/dialogues/{id:int}/previews")]
 public sealed class DialoguePreviewsController(DialogueDbContext db) : ControllerBase
 {
+    [HttpGet]
+    public async Task<IReadOnlyList<PreviewSessionSummary>> List(int id, CancellationToken cancellationToken) =>
+        await OwnedPreviews(id)
+            .OrderByDescending(preview => preview.StartedAtUnixMilliseconds).ThenByDescending(preview => preview.Id)
+            .Take(20)
+            .Select(preview => new PreviewSessionSummary(preview.Id, preview.Step, preview.StartedAtUnixMilliseconds))
+            .ToListAsync(cancellationToken);
+
+    [HttpGet("{previewId:guid}/history")]
+    public async Task<ActionResult<PreviewHistory>> History(int id, Guid previewId, CancellationToken cancellationToken)
+    {
+        var history = await OwnedPreviews(id).AsSingleQuery()
+            .Where(preview => preview.Id == previewId)
+            .Select(preview => new PreviewHistory(preview.Id, preview.Step,
+                preview.History.OrderBy(entry => entry.Step)
+                    .Select(entry => new PreviewHistoryStep(
+                        entry.Step, entry.LineId, entry.Speaker, entry.Text, entry.IsEnding, entry.ChoiceText)).ToList()))
+            .SingleOrDefaultAsync(cancellationToken);
+        return history is null ? NotFound() : Ok(history);
+    }
+
     [HttpPost]
     public async Task<ActionResult<PreviewStep>> StartPreview(
         int id, [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] PreviewInput? input, CancellationToken cancellationToken)
@@ -45,12 +66,15 @@ public sealed class DialoguePreviewsController(DialogueDbContext db) : Controlle
             Id = Guid.NewGuid(),
             DialogueId = id,
             CurrentLineId = graph.StartLineId!.Value,
-            UserId = CurrentUserId()
+            UserId = CurrentUserId(),
+            StartedAtUnixMilliseconds = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
         };
+        var step = graph.GetPreviewStep(preview, validation.UnreachableLineIds);
+        RecordHistory(preview, step, choiceText: null);
         db.Previews.Add(preview);
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return Ok(graph.GetPreviewStep(preview, validation.UnreachableLineIds));
+        return Ok(step);
     }
 
     [HttpPost("{previewId:guid}/choices")]
@@ -58,9 +82,7 @@ public sealed class DialoguePreviewsController(DialogueDbContext db) : Controlle
         int id, Guid previewId, SelectChoice request, CancellationToken cancellationToken)
     {
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        var userId = CurrentUserId();
-        var preview = await db.Previews.SingleOrDefaultAsync(
-            item => item.Id == previewId && item.DialogueId == id && item.UserId == userId, cancellationToken);
+        var preview = await OwnedPreviews(id).SingleOrDefaultAsync(item => item.Id == previewId, cancellationToken);
         if (preview is null)
         {
             return NotFound();
@@ -86,9 +108,30 @@ public sealed class DialoguePreviewsController(DialogueDbContext db) : Controlle
 
         preview.CurrentLineId = choice.TargetLineId;
         preview.Step++;
+        var step = graph.GetPreviewStep(preview, validation.UnreachableLineIds);
+        RecordHistory(preview, step, choice.Text);
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return Ok(graph.GetPreviewStep(preview, validation.UnreachableLineIds));
+        return Ok(step);
+    }
+
+    private IQueryable<DialoguePreview> OwnedPreviews(int dialogueId)
+    {
+        var userId = CurrentUserId();
+        return db.Previews.Where(preview => preview.DialogueId == dialogueId && preview.UserId == userId);
+    }
+
+    private static void RecordHistory(DialoguePreview preview, PreviewStep step, string? choiceText)
+    {
+        preview.History.Add(new PreviewHistoryEntry
+        {
+            Step = step.Step,
+            LineId = step.Line.Id,
+            Speaker = step.Line.Speaker,
+            Text = step.Line.Text,
+            IsEnding = step.Line.IsEnding,
+            ChoiceText = choiceText
+        });
     }
 
     private int CurrentUserId() => int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);

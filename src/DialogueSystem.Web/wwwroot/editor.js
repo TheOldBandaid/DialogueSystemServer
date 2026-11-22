@@ -4,6 +4,9 @@ const workspace = byId("workspace");
 const lineForm = byId("line-form");
 const minimumLevelForm = byId("minimum-level");
 const previewForm = byId("preview-form");
+const previewHistory = byId("preview-history");
+const previewSessions = byId("preview-sessions");
+const historyDate = new Intl.DateTimeFormat("ru-RU", { dateStyle: "short", timeStyle: "medium" });
 const accountAdmin = byId("account-admin");
 const roleLabels = { Editor: "Редактор", Administrator: "Администратор" };
 const state = { dialogue: null, lines: [], characters: [], line: null, token: "" };
@@ -54,6 +57,7 @@ async function refreshToken() {
 
 function showLogin() {
   showAccountManagement(null);
+  resetPreviewHistory();
   workspace.hidden = true;
   byId("logout").hidden = true;
   login.hidden = false;
@@ -149,7 +153,10 @@ async function loadDialogue(id, preferredLineId) {
   const [dialogue, lines, branches] = await Promise.all([
     api(route), api(`${route}/lines`), api(`${route}/story-branches`)
   ]);
-  if (state.dialogue?.id !== dialogue.id) previewForm.reset();
+  if (state.dialogue?.id !== dialogue.id) {
+    previewForm.reset();
+    resetPreviewHistory();
+  }
   state.dialogue = dialogue;
   renderLevelSettings();
   state.lines = lines;
@@ -291,9 +298,61 @@ function renderValidation(report) {
     : "Диалог готов к предпросмотру.";
 }
 
+function resetPreviewHistory() {
+  previewHistory.open = false;
+  previewSessions.replaceChildren();
+  previewSessions.disabled = true;
+  byId("preview-history-steps").replaceChildren();
+  byId("preview-history-message").textContent = "";
+}
+
+async function loadPreviewHistory(preferredId = previewSessions.value) {
+  const sessions = await api(`${path()}/previews`);
+  previewSessions.replaceChildren(...sessions.map(session => {
+    const timestamp = session.startedAtUnixMilliseconds;
+    const date = timestamp == null ? `Сеанс ${session.previewId.slice(0, 8)}` : historyDate.format(timestamp);
+    return new Option(`${date} · переходов: ${session.step}`, session.previewId);
+  }));
+  previewSessions.disabled = sessions.length === 0;
+  if (sessions.some(session => session.previewId === preferredId)) previewSessions.value = preferredId;
+  await showPreviewHistory(previewSessions.value);
+}
+
+async function showPreviewHistory(previewId) {
+  const list = byId("preview-history-steps");
+  const message = byId("preview-history-message");
+  list.replaceChildren();
+  message.textContent = "";
+  if (!previewId) {
+    message.textContent = "Для этого диалога пока нет прохождений.";
+    return;
+  }
+
+  const history = await api(`${path()}/previews/${previewId}/history`);
+  if (history.steps.length === 0) {
+    message.textContent = "Этот сеанс создан до появления истории.";
+    return;
+  }
+
+  const firstStep = history.steps[0].step;
+  list.start = firstStep;
+  if (firstStep > 0) message.textContent = `В этом сеансе история записана с шага ${firstStep}.`;
+  list.replaceChildren(...history.steps.map(step => {
+    const item = document.createElement("li");
+    const choice = document.createElement("strong");
+    choice.textContent = step.choiceText ?? "Начало диалога";
+    const line = document.createElement("p");
+    line.textContent = `${step.speaker} — ${step.text}${step.isEnding ? " · Конец диалога" : ""}`;
+    item.append(choice, line);
+    return item;
+  }));
+}
+
 async function requestPreview(route, body) {
   try {
-    renderStep(await api(route, "POST", body));
+    const step = await api(route, "POST", body);
+    renderStep(step);
+    if (previewHistory.open) await loadPreviewHistory(step.previewId);
   } catch (error) {
     if (error.status !== 422 || !error.result?.issues) throw error;
     byId("preview-step").replaceChildren();
@@ -426,6 +485,13 @@ byId("validate-dialogue").onclick = run(async () => {
   hideValidation();
   renderValidation(await api(`${path()}/validation`));
 });
+const refreshHistory = run(() => loadPreviewHistory());
+previewHistory.ontoggle = () => {
+  if (previewHistory.open) refreshHistory();
+};
+byId("refresh-preview-history").onclick = refreshHistory;
+previewSessions.onchange = run(() => showPreviewHistory(previewSessions.value));
+
 previewForm.onsubmit = run(async () => {
   byId("preview-step").replaceChildren();
   const level = previewForm.elements.playerLevel;

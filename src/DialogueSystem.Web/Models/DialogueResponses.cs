@@ -29,6 +29,12 @@ public sealed record PreviewStep(
     IReadOnlyList<PreviewChoice> Choices,
     IReadOnlyList<int> UnreachableLineIds);
 
+public sealed record PreviewSessionSummary(Guid PreviewId, int Step, long? StartedAtUnixMilliseconds);
+
+public sealed record PreviewHistoryStep(int Step, int LineId, string Speaker, string Text, bool IsEnding, string? ChoiceText);
+
+public sealed record PreviewHistory(Guid PreviewId, int CurrentStep, IReadOnlyList<PreviewHistoryStep> Steps);
+
 public sealed record PreviewInput([Range(1, int.MaxValue)] int? PlayerLevel);
 
 public sealed record SelectChoice(

@@ -44,6 +44,19 @@ public sealed class DialoguePreview
     public int DialogueId { get; set; }
     public int CurrentLineId { get; set; }
     public int Step { get; set; }
+    public long? StartedAtUnixMilliseconds { get; set; }
+    public List<PreviewHistoryEntry> History { get; } = [];
+}
+
+public sealed class PreviewHistoryEntry
+{
+    public Guid PreviewId { get; set; }
+    public int Step { get; set; }
+    public int LineId { get; set; }
+    public required string Speaker { get; set; }
+    public required string Text { get; set; }
+    public bool IsEnding { get; set; }
+    public string? ChoiceText { get; set; }
 }
 
 public sealed class Account

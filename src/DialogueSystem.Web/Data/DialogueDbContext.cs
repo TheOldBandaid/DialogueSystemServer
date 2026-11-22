@@ -16,6 +16,13 @@ public sealed class DialogueDbContext(DbContextOptions<DialogueDbContext> option
     {
         modelBuilder.Entity<Dialogue>().Property(dialogue => dialogue.Id).ValueGeneratedOnAdd();
         modelBuilder.Entity<Account>().HasIndex(account => account.Login).IsUnique();
+        modelBuilder.Entity<DialoguePreview>()
+            .HasIndex(preview => new { preview.UserId, preview.DialogueId, preview.StartedAtUnixMilliseconds });
+        modelBuilder.Entity<PreviewHistoryEntry>()
+            .HasKey(entry => new { entry.PreviewId, entry.Step });
+        modelBuilder.Entity<DialoguePreview>()
+            .HasMany(preview => preview.History).WithOne()
+            .HasForeignKey(entry => entry.PreviewId);
         modelBuilder.Entity<DialoguePreview>().HasOne<Account>().WithMany()
             .HasForeignKey(preview => preview.UserId);
         modelBuilder.Entity<DialogueLine>().HasAlternateKey(line => new { line.DialogueId, line.Id });

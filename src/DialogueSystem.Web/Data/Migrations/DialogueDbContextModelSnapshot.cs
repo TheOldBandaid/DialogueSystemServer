@@ -154,6 +154,9 @@ namespace DialogueSystem.Web.Data.Migrations
                     b.Property<int>("DialogueId")
                         .HasColumnType("INTEGER");
 
+                    b.Property<long?>("StartedAtUnixMilliseconds")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int>("Step")
                         .HasColumnType("INTEGER");
 
@@ -162,11 +165,41 @@ namespace DialogueSystem.Web.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("UserId");
-
                     b.HasIndex("DialogueId", "CurrentLineId");
 
+                    b.HasIndex("UserId", "DialogueId", "StartedAtUnixMilliseconds");
+
                     b.ToTable("Previews");
+                });
+
+            modelBuilder.Entity("DialogueSystem.Web.Models.PreviewHistoryEntry", b =>
+                {
+                    b.Property<Guid>("PreviewId")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("Step")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ChoiceText")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsEnding")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("LineId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Speaker")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("PreviewId", "Step");
+
+                    b.ToTable("PreviewHistoryEntry");
                 });
 
             modelBuilder.Entity("DialogueSystem.Web.Models.Dialogue", b =>
@@ -228,6 +261,15 @@ namespace DialogueSystem.Web.Data.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("DialogueSystem.Web.Models.PreviewHistoryEntry", b =>
+                {
+                    b.HasOne("DialogueSystem.Web.Models.DialoguePreview", null)
+                        .WithMany("History")
+                        .HasForeignKey("PreviewId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("DialogueSystem.Web.Models.Dialogue", b =>
                 {
                     b.Navigation("Lines");
@@ -236,6 +278,11 @@ namespace DialogueSystem.Web.Data.Migrations
             modelBuilder.Entity("DialogueSystem.Web.Models.DialogueLine", b =>
                 {
                     b.Navigation("Choices");
+                });
+
+            modelBuilder.Entity("DialogueSystem.Web.Models.DialoguePreview", b =>
+                {
+                    b.Navigation("History");
                 });
 #pragma warning restore 612, 618
         }
