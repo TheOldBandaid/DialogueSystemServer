@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace DialogueSystem.Web.Models;
 
-public sealed record DialogueSummary(int Id, string Title, int? StartLineId);
+public sealed record DialogueSummary(int Id, string Title, int? StartLineId, int? MinimumPlayerLevel = null);
 
 public sealed record LineSummary(int Id, string Speaker, string Text, bool IsEnding, bool IsStoryBranch, int SpeakerId);
 
@@ -28,6 +28,8 @@ public sealed record PreviewStep(
     LineSummary Line,
     IReadOnlyList<PreviewChoice> Choices,
     IReadOnlyList<int> UnreachableLineIds);
+
+public sealed record PreviewInput([Range(1, int.MaxValue)] int? PlayerLevel);
 
 public sealed record SelectChoice(
     [Range(1, int.MaxValue)] int ChoiceId,

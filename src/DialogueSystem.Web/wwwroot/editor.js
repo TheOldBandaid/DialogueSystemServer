@@ -2,6 +2,8 @@ const byId = id => document.getElementById(id);
 const login = byId("login");
 const workspace = byId("workspace");
 const lineForm = byId("line-form");
+const minimumLevelForm = byId("minimum-level");
+const previewForm = byId("preview-form");
 const accountAdmin = byId("account-admin");
 const roleLabels = { Editor: "Редактор", Administrator: "Администратор" };
 const state = { dialogue: null, lines: [], characters: [], line: null, token: "" };
@@ -147,7 +149,9 @@ async function loadDialogue(id, preferredLineId) {
   const [dialogue, lines, branches] = await Promise.all([
     api(route), api(`${route}/lines`), api(`${route}/story-branches`)
   ]);
+  if (state.dialogue?.id !== dialogue.id) previewForm.reset();
   state.dialogue = dialogue;
+  renderLevelSettings();
   state.lines = lines;
   listLinks("lines", lines, "Реплик пока нет.");
   listLinks("branches", branches, "Сюжетные развилки не отмечены.");
@@ -247,6 +251,16 @@ async function importDialogue(data) {
   byId("preview-step").replaceChildren();
   await openWorkspace(created.id);
   return created;
+}
+
+function renderLevelSettings() {
+  const minimum = state.dialogue.minimumPlayerLevel;
+  const hasMinimum = minimum != null;
+  minimumLevelForm.elements.minimumPlayerLevel.value = minimum ?? "";
+  byId("preview-level").hidden = !hasMinimum;
+  byId("preview-level-caption").textContent = hasMinimum ? `Уровень игрока (от ${minimum})` : "Уровень игрока";
+  previewForm.elements.playerLevel.disabled = !hasMinimum;
+  previewForm.elements.playerLevel.required = hasMinimum;
 }
 
 function hideValidation() {
@@ -400,13 +414,22 @@ byId("delete-line").onclick = run(async () => {
     await loadDialogue(state.dialogue.id);
   }
 });
+minimumLevelForm.onsubmit = run(async () => {
+  const field = minimumLevelForm.elements.minimumPlayerLevel;
+  const minimum = field.value === "" ? null : field.valueAsNumber;
+  await api(`${path()}/minimum-level`, "PUT", { minimumPlayerLevel: minimum });
+  state.dialogue.minimumPlayerLevel = minimum;
+  renderLevelSettings();
+  byId("status").textContent = minimum == null ? "Ограничение по уровню снято." : "Минимальный уровень сохранён.";
+});
 byId("validate-dialogue").onclick = run(async () => {
   hideValidation();
   renderValidation(await api(`${path()}/validation`));
 });
-byId("start-preview").onclick = run(async () => {
+previewForm.onsubmit = run(async () => {
   byId("preview-step").replaceChildren();
-  await requestPreview(`${path()}/previews`);
+  const level = previewForm.elements.playerLevel;
+  await requestPreview(`${path()}/previews`, level.disabled ? undefined : { playerLevel: level.valueAsNumber });
 });
 
 await run(async () => {

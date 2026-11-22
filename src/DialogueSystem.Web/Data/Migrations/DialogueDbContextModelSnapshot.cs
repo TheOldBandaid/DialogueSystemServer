@@ -64,6 +64,9 @@ namespace DialogueSystem.Web.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
+                    b.Property<int?>("MinimumPlayerLevel")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int?>("StartLineId")
                         .HasColumnType("INTEGER");
 

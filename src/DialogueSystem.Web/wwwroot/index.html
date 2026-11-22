@@ -52,6 +52,12 @@
           <button type="button" id="export-dialogue">Скачать JSON</button>
           <button type="button" id="validate-dialogue" aria-controls="validation-report">Проверить диалог</button>
         </div>
+        <form id="minimum-level" class="actions dialogue-actions">
+          <label>Минимальный уровень игрока
+            <input name="minimumPlayerLevel" type="number" min="1" max="2147483647" step="1" placeholder="Без ограничения">
+          </label>
+          <button>Сохранить порог</button>
+        </form>
         <div id="validation-report" hidden>
           <p id="validation-summary" role="status"></p>
           <ul id="validation-issues" aria-label="Ошибки диалога" hidden></ul>
@@ -94,7 +100,12 @@
       </section>
       <section id="preview">
         <h2>Предпросмотр</h2>
-        <button id="start-preview">Начать с первой реплики</button>
+        <form id="preview-form" class="actions">
+          <label id="preview-level" hidden><span id="preview-level-caption">Уровень игрока</span>
+            <input name="playerLevel" type="number" min="1" max="2147483647" step="1" disabled>
+          </label>
+          <button id="start-preview">Начать с первой реплики</button>
+        </form>
         <div id="preview-step" aria-live="polite"></div>
       </section>
     </div>

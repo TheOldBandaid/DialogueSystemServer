@@ -1,5 +1,4 @@
 using DialogueSystem.Web.Data;
-using DialogueSystem.Web.Models;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -61,8 +60,7 @@ public sealed class AccountsApiTests
         await using (var db = new DialogueDbContext(options))
         {
             await db.Database.MigrateAsync("20261120110136_InitialDialogueSchema");
-            db.Dialogues.Add(new Dialogue { Title = title });
-            await db.SaveChangesAsync();
+            await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO Dialogues (Title) VALUES ({title})");
         }
 
         var password = Guid.NewGuid().ToString("N");
@@ -70,7 +68,9 @@ public sealed class AccountsApiTests
         {
             using var scope = app.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<DialogueDbContext>();
-            Assert.Equal(title, (await db.Dialogues.SingleAsync()).Title);
+            var dialogue = await db.Dialogues.SingleAsync();
+            Assert.Equal(title, dialogue.Title);
+            Assert.Null(dialogue.MinimumPlayerLevel);
             Assert.Empty(await db.Database.GetPendingMigrationsAsync());
 
             using var admin = new DialogueApiClient(app);

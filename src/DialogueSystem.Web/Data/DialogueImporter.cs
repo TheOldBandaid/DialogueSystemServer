@@ -23,7 +23,11 @@ internal static class DialogueImporter
             }
         }
 
-        var dialogue = new Dialogue { Title = document.Title.Trim() };
+        var dialogue = new Dialogue
+        {
+            Title = document.Title.Trim(),
+            MinimumPlayerLevel = document.MinimumPlayerLevel
+        };
         var lines = document.Lines.ToDictionary(line => line.Id, line => new DialogueLine
         {
             Speaker = speakers[line.Speaker.Trim()],
@@ -47,6 +51,6 @@ internal static class DialogueImporter
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
-        return new DialogueSummary(dialogue.Id, dialogue.Title, dialogue.StartLineId);
+        return new DialogueSummary(dialogue.Id, dialogue.Title, dialogue.StartLineId, dialogue.MinimumPlayerLevel);
     }
 }

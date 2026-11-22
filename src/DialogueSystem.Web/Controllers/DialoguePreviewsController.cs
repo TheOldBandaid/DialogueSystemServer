@@ -3,6 +3,7 @@ using DialogueSystem.Web.Data;
 using DialogueSystem.Web.Models;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.EntityFrameworkCore;
 
 namespace DialogueSystem.Web.Controllers;
@@ -14,7 +15,8 @@ namespace DialogueSystem.Web.Controllers;
 public sealed class DialoguePreviewsController(DialogueDbContext db) : ControllerBase
 {
     [HttpPost]
-    public async Task<ActionResult<PreviewStep>> StartPreview(int id, CancellationToken cancellationToken)
+    public async Task<ActionResult<PreviewStep>> StartPreview(
+        int id, [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] PreviewInput? input, CancellationToken cancellationToken)
     {
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         var graph = await DialogueGraphLoader.LoadAsync(db, id, cancellationToken);
@@ -27,6 +29,15 @@ public sealed class DialoguePreviewsController(DialogueDbContext db) : Controlle
         if (validation.Errors.Count != 0)
         {
             return UnprocessableEntity(validation);
+        }
+
+        if (graph.MinimumPlayerLevel is int minimum && (input?.PlayerLevel is not int level || level < minimum))
+        {
+            return UnprocessableEntity(new ProblemDetails
+            {
+                Detail = $"Для начала диалога требуется уровень {minimum} или выше.",
+                Extensions = { ["minimumPlayerLevel"] = minimum }
+            });
         }
 
         var preview = new DialoguePreview

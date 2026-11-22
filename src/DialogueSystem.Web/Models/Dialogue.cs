@@ -11,6 +11,7 @@ public sealed class Dialogue
     public int Id { get; set; }
     public required string Title { get; set; }
     public int? StartLineId { get; set; }
+    public int? MinimumPlayerLevel { get; set; }
     public List<DialogueLine> Lines { get; } = [];
 }
 

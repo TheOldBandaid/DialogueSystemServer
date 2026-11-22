@@ -5,6 +5,7 @@ namespace DialogueSystem.Web.Services;
 internal sealed class DialogueGraph(Dialogue dialogue, IReadOnlyList<DialogueChoice> choices)
 {
     public int? StartLineId => dialogue.StartLineId;
+    public int? MinimumPlayerLevel => dialogue.MinimumPlayerLevel;
     private readonly Dictionary<int, DialogueLine> _lines = dialogue.Lines.ToDictionary(line => line.Id);
     private readonly ILookup<int, DialogueChoice> _outgoing =
         choices.OrderBy(choice => choice.Position).ToLookup(choice => choice.SourceLineId);
@@ -22,7 +23,8 @@ internal sealed class DialogueGraph(Dialogue dialogue, IReadOnlyList<DialogueCho
                 line.Id, line.Speaker.Name, line.Text, line.IsEnding, line.IsStoryBranch)).ToArray(),
         choices.OrderBy(choice => choice.SourceLineId).ThenBy(choice => choice.Position)
             .Select(choice => new DialogueDocumentChoice(
-                choice.SourceLineId, choice.TargetLineId, choice.Text, choice.Position)).ToArray());
+                choice.SourceLineId, choice.TargetLineId, choice.Text, choice.Position)).ToArray(),
+        dialogue.MinimumPlayerLevel);
 
     public DialogueValidation Validate()
     {

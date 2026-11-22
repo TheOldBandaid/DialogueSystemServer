@@ -7,7 +7,8 @@ public sealed record DialogueDocument(
     [Required, StringLength(160)] string Title,
     [Range(1, int.MaxValue)] int? StartLineId,
     [Required] IReadOnlyList<DialogueDocumentLine> Lines,
-    [Required] IReadOnlyList<DialogueDocumentChoice> Choices) : IValidatableObject
+    [Required] IReadOnlyList<DialogueDocumentChoice> Choices,
+    [Range(1, int.MaxValue)] int? MinimumPlayerLevel = null) : IValidatableObject
 {
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {

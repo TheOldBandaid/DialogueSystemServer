@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 using DialogueSystem.Web.Data;
 using DialogueSystem.Web.Models;
 using Microsoft.AspNetCore.Authorization;
@@ -16,14 +17,14 @@ public sealed class DialoguesController(DialogueDbContext db) : ControllerBase
     [HttpGet]
     public async Task<IReadOnlyList<DialogueSummary>> List(CancellationToken cancellationToken) =>
         await db.Dialogues.OrderBy(dialogue => dialogue.Title)
-            .Select(dialogue => new DialogueSummary(dialogue.Id, dialogue.Title, dialogue.StartLineId))
+            .Select(dialogue => new DialogueSummary(dialogue.Id, dialogue.Title, dialogue.StartLineId, dialogue.MinimumPlayerLevel))
             .ToListAsync(cancellationToken);
 
     [HttpGet("{id:int}")]
     public async Task<ActionResult<DialogueSummary>> Get(int id, CancellationToken cancellationToken)
     {
         var dialogue = await db.Dialogues.FindAsync([id], cancellationToken);
-        return dialogue is null ? NotFound() : Ok(new DialogueSummary(dialogue.Id, dialogue.Title, dialogue.StartLineId));
+        return dialogue is null ? NotFound() : Ok(new DialogueSummary(dialogue.Id, dialogue.Title, dialogue.StartLineId, dialogue.MinimumPlayerLevel));
     }
 
     [HttpPost]
@@ -33,7 +34,7 @@ public sealed class DialoguesController(DialogueDbContext db) : ControllerBase
         db.Dialogues.Add(dialogue);
         await db.SaveChangesAsync(cancellationToken);
         return CreatedAtAction(nameof(Get), new { id = dialogue.Id },
-            new DialogueSummary(dialogue.Id, dialogue.Title, dialogue.StartLineId));
+            new DialogueSummary(dialogue.Id, dialogue.Title, dialogue.StartLineId, dialogue.MinimumPlayerLevel));
     }
 
     [HttpPut("{id:int}")]
@@ -46,6 +47,20 @@ public sealed class DialoguesController(DialogueDbContext db) : ControllerBase
         }
 
         dialogue.Title = input.Title.Trim();
+        await db.SaveChangesAsync(cancellationToken);
+        return NoContent();
+    }
+
+    [HttpPut("{id:int}/minimum-level")]
+    public async Task<IActionResult> SetMinimumLevel(int id, MinimumLevelInput input, CancellationToken cancellationToken)
+    {
+        var dialogue = await db.Dialogues.FindAsync([id], cancellationToken);
+        if (dialogue is null)
+        {
+            return NotFound();
+        }
+
+        dialogue.MinimumPlayerLevel = input.MinimumPlayerLevel;
         await db.SaveChangesAsync(cancellationToken);
         return NoContent();
     }
@@ -66,6 +81,8 @@ public sealed class DialoguesController(DialogueDbContext db) : ControllerBase
     }
 
     public sealed record DialogueInput([Required, StringLength(160)] string Title);
+
+    public sealed record MinimumLevelInput([property: JsonRequired] [Range(1, int.MaxValue)] int? MinimumPlayerLevel);
 
     [HttpGet("{id:int}/lines/{lineId:int}/context")]
     public async Task<ActionResult<LineContext>> Context(int id, int lineId, CancellationToken cancellationToken)
