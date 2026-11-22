@@ -2,6 +2,8 @@ const byId = id => document.getElementById(id);
 const login = byId("login");
 const workspace = byId("workspace");
 const lineForm = byId("line-form");
+const accountAdmin = byId("account-admin");
+const roleLabels = { Editor: "Редактор", Administrator: "Администратор" };
 const state = { dialogue: null, lines: [], characters: [], line: null, token: "" };
 
 async function api(path, method = "GET", body) {
@@ -49,9 +51,61 @@ async function refreshToken() {
 }
 
 function showLogin() {
+  showAccountManagement(null);
   workspace.hidden = true;
   byId("logout").hidden = true;
   login.hidden = false;
+}
+
+function showAccountManagement(profile) {
+  accountAdmin.hidden = profile?.role !== "Administrator";
+  if (accountAdmin.hidden) {
+    accountAdmin.open = false;
+    byId("accounts-list").replaceChildren();
+  }
+}
+
+async function accountRequest(route, method, body) {
+  try {
+    return await api(route, method, body);
+  } catch (error) {
+    if (error.status !== 403) throw error;
+    showAccountManagement(null);
+    throw new Error("Для управления ролями нужны права администратора.");
+  }
+}
+
+function accountRow(account) {
+  const row = document.createElement("li");
+  const form = document.createElement("form");
+  form.className = "actions account-role";
+  const label = document.createElement("label");
+  const loginName = document.createElement("span");
+  loginName.textContent = account.login;
+  const role = document.createElement("select");
+  role.setAttribute("aria-label", `Роль для ${account.login}`);
+  role.append(...Object.entries(roleLabels).map(([value, title]) => new Option(title, value)));
+  role.value = account.role;
+  label.append(loginName, role);
+  const save = document.createElement("button");
+  save.textContent = "Сохранить роль";
+  save.disabled = true;
+  role.onchange = () => { save.disabled = role.value === account.role; };
+
+  form.onsubmit = run(async () => {
+    await accountRequest(`/api/accounts/${account.id}/role`, "PUT", { role: role.value });
+    showAccountManagement(await api("/api/accounts/me"));
+    if (!accountAdmin.hidden) await loadAccounts();
+    byId("status").textContent = `Роль пользователя «${account.login}» обновлена.`;
+  });
+  form.append(label, save);
+  row.append(form);
+  return row;
+}
+
+async function loadAccounts() {
+  const accounts = await accountRequest("/api/accounts");
+  byId("accounts-list").replaceChildren(...accounts.map(accountRow));
 }
 
 function setOptions(select, records, label, current) {
@@ -251,11 +305,18 @@ function renderStep(step) {
   host.replaceChildren(text, actions);
 }
 
+const refreshAccounts = run(loadAccounts);
+accountAdmin.ontoggle = () => {
+  if (accountAdmin.open && !accountAdmin.hidden) refreshAccounts();
+};
+byId("refresh-accounts").onclick = refreshAccounts;
+
 login.onsubmit = run(async () => {
   await refreshToken();
-  await api("/api/accounts/login", "POST", Object.fromEntries(new FormData(login)));
+  const profile = await api("/api/accounts/login", "POST", Object.fromEntries(new FormData(login)));
   login.reset();
   await refreshToken();
+  showAccountManagement(profile);
   await openWorkspace();
 });
 byId("logout").onclick = run(async () => {
@@ -350,7 +411,7 @@ byId("start-preview").onclick = run(async () => {
 
 await run(async () => {
   try {
-    await api("/api/accounts/me");
+    showAccountManagement(await api("/api/accounts/me"));
   } catch (error) {
     if (error.status !== 401) throw error;
     showLogin();
