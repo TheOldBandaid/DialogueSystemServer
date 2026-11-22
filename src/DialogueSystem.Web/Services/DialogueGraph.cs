@@ -26,19 +26,19 @@ internal sealed class DialogueGraph(Dialogue dialogue, IReadOnlyList<DialogueCho
 
     public DialogueValidation Validate()
     {
-        var errors = new List<string>();
         if (dialogue.StartLineId is not int startLineId || !_lines.ContainsKey(startLineId))
         {
-            return new DialogueValidation(["У диалога нет стартовой реплики."], _lines.Keys.Order().ToArray());
+            return BuildValidation([new("missing-start", "У диалога нет стартовой реплики.")], _lines.Keys.Order().ToArray());
         }
 
         var reachable = Traverse([startLineId], id => _outgoing[id].Select(choice => choice.TargetLineId));
         var endings = reachable.Where(id => _lines[id].IsEnding).ToArray();
         var canReachEnding = Traverse(endings, id => _incoming[id].Select(choice => choice.SourceLineId));
+        var issues = new List<DialogueValidationIssue>();
 
         if (endings.Length == 0)
         {
-            errors.Add("От стартовой реплики нельзя добраться до концовки.");
+            issues.Add(new("no-reachable-ending", "От стартовой реплики нельзя добраться до концовки.", startLineId));
         }
 
         foreach (var id in reachable.Order())
@@ -46,15 +46,15 @@ internal sealed class DialogueGraph(Dialogue dialogue, IReadOnlyList<DialogueCho
             var line = _lines[id];
             if (line.IsEnding && _outgoing[id].Any())
             {
-                errors.Add($"У конечной реплики {id} есть исходящие варианты.");
+                issues.Add(new("ending-has-choices", $"У конечной реплики {id} есть исходящие варианты.", id));
             }
             else if (!line.IsEnding && !_outgoing[id].Any())
             {
-                errors.Add($"У промежуточной реплики {id} нет исходящих вариантов.");
+                issues.Add(new("line-without-choices", $"У промежуточной реплики {id} нет исходящих вариантов.", id));
             }
             else if (!canReachEnding.Contains(id))
             {
-                errors.Add($"Из реплики {id} нельзя добраться до концовки.");
+                issues.Add(new("no-path-to-ending", $"Из реплики {id} нельзя добраться до концовки.", id));
             }
         }
 
@@ -62,12 +62,17 @@ internal sealed class DialogueGraph(Dialogue dialogue, IReadOnlyList<DialogueCho
         {
             if (_outgoing[line.Id].Select(choice => choice.TargetLineId).Distinct().Take(2).Count() < 2)
             {
-                errors.Add($"Сюжетная развилка {line.Id} должна вести хотя бы к двум разным репликам.");
+                issues.Add(new("story-branch-needs-targets",
+                    $"Сюжетная развилка {line.Id} должна вести хотя бы к двум разным репликам.", line.Id));
             }
         }
 
-        return new DialogueValidation(errors, _lines.Keys.Except(reachable).Order().ToArray());
+        return BuildValidation(issues, _lines.Keys.Except(reachable).Order().ToArray());
     }
+
+    private static DialogueValidation BuildValidation(
+        IReadOnlyList<DialogueValidationIssue> issues, IReadOnlyList<int> unreachableLineIds) =>
+        new(issues.Select(issue => issue.Message).ToArray(), unreachableLineIds) { Issues = issues };
 
     public DialogueChoice? FindChoice(int lineId, int choiceId) =>
         _lines[lineId].IsEnding ? null : _outgoing[lineId].FirstOrDefault(choice => choice.Id == choiceId);

@@ -76,7 +76,11 @@ public sealed class DialogueApiTests
         var speakerId = Assert.Single(await editor.Get<Character[]>("/api/characters")).Id;
         var draft = await CreateDialogue("Архивный черновик");
         var other = await CreateDialogue("Другой диалог");
-        await editor.Expect(UnprocessableEntity, HttpMethod.Post, $"{draft}/previews");
+        var withoutStart = await editor.Read<DialogueValidation>(HttpMethod.Post, $"{draft}/previews", UnprocessableEntity);
+        var missingStart = Assert.Single(withoutStart.Issues);
+        Assert.Equal("missing-start", missingStart.Code);
+        Assert.Null(missingStart.LineId);
+        Assert.Equal(missingStart.Message, Assert.Single(withoutStart.Errors));
 
         var start = await AddLine(draft, "Начало");
         var loop = await AddLine(draft, "Цикл");
@@ -99,7 +103,12 @@ public sealed class DialogueApiTests
         Assert.Equal(ending, unchanged.Outgoing[0].Line.Id);
 
         var invalid = await editor.Read<DialogueValidation>(HttpMethod.Post, $"{draft}/previews", UnprocessableEntity);
-        Assert.Contains(invalid.Errors, error => error.Contains($"Из реплики {loop}", StringComparison.Ordinal));
+        var issue = Assert.Single(invalid.Issues);
+        Assert.Equal("no-path-to-ending", issue.Code);
+        Assert.Equal(loop, issue.LineId);
+        Assert.Equal(issue.Message, Assert.Single(invalid.Errors));
+        var report = await editor.Get<DialogueValidation>($"{draft}/validation");
+        Assert.Equal(invalid.Issues.ToArray(), report.Issues.ToArray());
         await AddChoice(loop, ending, 2);
         await editor.Expect(OK, HttpMethod.Post, $"{draft}/previews");
 
@@ -108,6 +117,7 @@ public sealed class DialogueApiTests
         var orphan = await AddLine(draft, "Неиспользуемая реплика");
         await AddChoice(orphan, orphan, 1);
         var validation = await editor.Get<DialogueValidation>($"{draft}/validation");
+        Assert.Empty(validation.Issues);
         Assert.Contains(orphan, validation.UnreachableLineIds);
         await editor.Expect(NoContent, HttpMethod.Delete, $"{draft}/lines/{orphan}");
         await editor.Expect(NotFound, HttpMethod.Get, $"{draft}/lines/{orphan}/context");

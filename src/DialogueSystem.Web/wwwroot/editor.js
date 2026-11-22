@@ -19,7 +19,7 @@ async function api(path, method = "GET", body) {
     const details = validation && Object.values(validation).flat().join(" ");
     const message = response.status === 401 ? "Проверьте имя пользователя и пароль или войдите заново." :
       result?.detail || details || `Запрос отклонён (HTTP ${response.status}).`;
-    throw Object.assign(new Error(message), { status: response.status });
+    throw Object.assign(new Error(message), { status: response.status, result });
   }
   return result;
 }
@@ -67,11 +67,11 @@ const shortLabel = line => {
   return label.length > 72 ? `${label.slice(0, 71)}…` : label;
 };
 
-function linkToLine(line, label) {
+function linkToLine(lineId, label) {
   const button = document.createElement("button");
   button.type = "button";
   button.textContent = label;
-  button.onclick = run(() => selectLine(line.id));
+  button.onclick = run(() => selectLine(lineId));
   const item = document.createElement("li");
   item.append(button);
   return item;
@@ -79,7 +79,7 @@ function linkToLine(line, label) {
 
 function listLinks(target, lines, empty) {
   const list = byId(target);
-  list.replaceChildren(...lines.map(line => linkToLine(line, shortLabel(line))));
+  list.replaceChildren(...lines.map(line => linkToLine(line.id, shortLabel(line))));
   if (lines.length === 0) {
     const item = document.createElement("li");
     item.textContent = empty;
@@ -88,6 +88,7 @@ function listLinks(target, lines, empty) {
 }
 
 async function loadDialogue(id, preferredLineId) {
+  hideValidation();
   const route = `/api/dialogues/${id}`;
   const [dialogue, lines, branches] = await Promise.all([
     api(route), api(`${route}/lines`), api(`${route}/story-branches`)
@@ -116,7 +117,7 @@ async function selectLine(id) {
   if (!context) return;
 
   byId("incoming").replaceChildren(...context.incoming.map(choice =>
-    linkToLine(choice.line, `${choice.text} ← ${shortLabel(choice.line)}`)));
+    linkToLine(choice.line.id, `${choice.text} ← ${shortLabel(choice.line)}`)));
   byId("incoming").hidden = context.incoming.length === 0;
   byId("choices").replaceChildren(...context.outgoing.map(choice => choiceForm(choice)));
   byId("new-choice").hidden = line.isEnding;
@@ -151,6 +152,7 @@ function choiceForm(choice, position) {
   fields.remove.onclick = run(async () => {
     if (choice) {
       await api(`${linePath()}/choices/${choice.id}`, "DELETE");
+      hideValidation();
       await selectLine(state.line.id);
     } else {
       form.remove();
@@ -164,6 +166,7 @@ function choiceForm(choice, position) {
       targetLineId: Number(fields.targetLineId.value),
       position: Number(fields.position.value)
     });
+    hideValidation();
     await selectLine(state.line.id);
   });
   return form;
@@ -192,6 +195,45 @@ async function importDialogue(data) {
   return created;
 }
 
+function hideValidation() {
+  byId("validation-report").hidden = true;
+}
+
+function renderValidation(report) {
+  const panel = byId("validation-report");
+  const issues = byId("validation-issues");
+  const unreachable = byId("validation-unreachable");
+  const linesById = new Map(state.lines.map(line => [line.id, line]));
+
+  issues.replaceChildren(...report.issues.map(issue => {
+    if (issue.lineId != null) return linkToLine(issue.lineId, issue.message);
+    const item = document.createElement("li");
+    item.textContent = issue.message;
+    return item;
+  }));
+  issues.hidden = report.issues.length === 0;
+  byId("validation-unreachable-lines").replaceChildren(...report.unreachableLineIds.map(id => {
+    const line = linesById.get(id);
+    return linkToLine(id, line ? shortLabel(line) : `Реплика №${id}`);
+  }));
+  unreachable.hidden = report.unreachableLineIds.length === 0;
+  panel.hidden = false;
+  byId("validation-summary").textContent = report.issues.length > 0
+    ? "Перед предпросмотром нужно исправить ошибки."
+    : "Диалог готов к предпросмотру.";
+}
+
+async function requestPreview(route, body) {
+  try {
+    renderStep(await api(route, "POST", body));
+  } catch (error) {
+    if (error.status !== 422 || !error.result?.issues) throw error;
+    byId("preview-step").replaceChildren();
+    renderValidation(error.result);
+    byId("validation-report").scrollIntoView({ block: "nearest" });
+  }
+}
+
 function renderStep(step) {
   const host = byId("preview-step");
   const text = document.createElement("p");
@@ -201,11 +243,9 @@ function renderStep(step) {
   for (const choice of step.choices) {
     const button = document.createElement("button");
     button.textContent = choice.text;
-    button.onclick = run(async () => {
-      renderStep(await api(`${path()}/previews/${step.previewId}/choices`, "POST", {
-        choiceId: choice.id, step: step.step
-      }));
-    });
+    button.onclick = run(() => requestPreview(`${path()}/previews/${step.previewId}/choices`, {
+      choiceId: choice.id, step: step.step
+    }));
     actions.append(button);
   }
   host.replaceChildren(text, actions);
@@ -299,9 +339,13 @@ byId("delete-line").onclick = run(async () => {
     await loadDialogue(state.dialogue.id);
   }
 });
+byId("validate-dialogue").onclick = run(async () => {
+  hideValidation();
+  renderValidation(await api(`${path()}/validation`));
+});
 byId("start-preview").onclick = run(async () => {
   byId("preview-step").replaceChildren();
-  renderStep(await api(`${path()}/previews`, "POST"));
+  await requestPreview(`${path()}/previews`);
 });
 
 await run(async () => {

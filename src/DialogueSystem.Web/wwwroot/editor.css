@@ -19,5 +19,6 @@ li { margin-bottom: .4rem; overflow-wrap: anywhere; }
 #status { color: #8a3120; overflow-wrap: anywhere; }
 #dialogues { width: min(100%, 30rem); }
 .dialogue-actions { margin-bottom: 1rem; }
+#validation-report { border-inline-start: .25rem solid #759686; padding-inline-start: .85rem; margin-bottom: 1rem; }
 [hidden] { display: none !important; }
 @media (max-width: 680px) { .columns { grid-template-columns: 1fr; } }

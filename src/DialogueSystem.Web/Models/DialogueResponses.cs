@@ -13,7 +13,12 @@ public sealed record LineContext(
     IReadOnlyList<ChoiceLink> Incoming,
     IReadOnlyList<ChoiceLink> Outgoing);
 
-public sealed record DialogueValidation(IReadOnlyList<string> Errors, IReadOnlyList<int> UnreachableLineIds);
+public sealed record DialogueValidation(IReadOnlyList<string> Errors, IReadOnlyList<int> UnreachableLineIds)
+{
+    public IReadOnlyList<DialogueValidationIssue> Issues { get; init; } = [];
+}
+
+public sealed record DialogueValidationIssue(string Code, string Message, int? LineId = null);
 
 public sealed record PreviewChoice(int Id, string Text);
 

@@ -45,6 +45,15 @@
         <div class="actions dialogue-actions">
           <button type="button" id="copy-dialogue">Копировать диалог</button>
           <button type="button" id="export-dialogue">Скачать JSON</button>
+          <button type="button" id="validate-dialogue" aria-controls="validation-report">Проверить диалог</button>
+        </div>
+        <div id="validation-report" hidden>
+          <p id="validation-summary" role="status"></p>
+          <ul id="validation-issues" aria-label="Ошибки диалога" hidden></ul>
+          <div id="validation-unreachable" hidden>
+            <h3>Недостижимые реплики</h3>
+            <ul id="validation-unreachable-lines"></ul>
+          </div>
         </div>
         <div class="columns">
           <aside>
