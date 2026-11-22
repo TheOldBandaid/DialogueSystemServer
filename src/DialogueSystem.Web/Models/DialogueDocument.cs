@@ -71,4 +71,6 @@ public sealed record DialogueDocumentChoice(
     [Range(1, int.MaxValue)] int SourceLineId,
     [Range(1, int.MaxValue)] int TargetLineId,
     [Required, StringLength(500)] string Text,
-    [Range(1, int.MaxValue)] int Position);
+    [Range(1, int.MaxValue)] int Position,
+    [StringLength(DialogueChoice.MaximumStoryStateLength)] string? RequiredState = null,
+    [StringLength(DialogueChoice.MaximumStoryStateLength)] string? NextState = null);

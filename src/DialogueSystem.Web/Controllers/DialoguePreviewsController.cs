@@ -30,7 +30,8 @@ public sealed class DialoguePreviewsController(DialogueDbContext db) : Controlle
             .Select(preview => new PreviewHistory(preview.Id, preview.Step,
                 preview.History.OrderBy(entry => entry.Step)
                     .Select(entry => new PreviewHistoryStep(
-                        entry.Step, entry.LineId, entry.Speaker, entry.Text, entry.IsEnding, entry.ChoiceText)).ToList()))
+                        entry.Step, entry.LineId, entry.Speaker, entry.Text, entry.IsEnding, entry.ChoiceText,
+                        entry.StoryState)).ToList()))
             .SingleOrDefaultAsync(cancellationToken);
         return history is null ? NotFound() : Ok(history);
     }
@@ -94,19 +95,20 @@ public sealed class DialoguePreviewsController(DialogueDbContext db) : Controlle
         }
 
         var graph = (await DialogueGraphLoader.LoadAsync(db, id, cancellationToken))!;
-        var validation = graph.Validate();
+        var validation = graph.Validate(preview);
         if (validation.Errors.Count != 0)
         {
             return UnprocessableEntity(validation);
         }
 
-        var choice = graph.FindChoice(preview.CurrentLineId, request.ChoiceId);
+        var choice = graph.FindChoice(preview, request.ChoiceId);
         if (choice is null)
         {
             return BadRequest(new ProblemDetails { Detail = "Этот ответ недоступен в текущей реплике." });
         }
 
         preview.CurrentLineId = choice.TargetLineId;
+        preview.StoryState = choice.NextState ?? preview.StoryState;
         preview.Step++;
         var step = graph.GetPreviewStep(preview, validation.UnreachableLineIds);
         RecordHistory(preview, step, choice.Text);
@@ -130,7 +132,8 @@ public sealed class DialoguePreviewsController(DialogueDbContext db) : Controlle
             Speaker = step.Line.Speaker,
             Text = step.Line.Text,
             IsEnding = step.Line.IsEnding,
-            ChoiceText = choiceText
+            ChoiceText = choiceText,
+            StoryState = step.StoryState
         });
     }
 

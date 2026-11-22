@@ -19,6 +19,7 @@
   <ItemGroup>
     <ProjectReference Include="../../src/DialogueSystem.Web/DialogueSystem.Web.csproj" />
     <Using Include="Xunit" />
+    <None Include="../../examples/duty-signal.json" Link="examples/duty-signal.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

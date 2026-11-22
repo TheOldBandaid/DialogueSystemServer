@@ -35,6 +35,13 @@ public sealed class DialogueChoice
     public int TargetLineId { get; set; }
     public required string Text { get; set; }
     public int Position { get; set; }
+    public string? RequiredState { get; set; }
+    public string? NextState { get; set; }
+
+    public const int MaximumStoryStateLength = 40;
+
+    internal static string? NormalizeStoryState(string? state) =>
+        string.IsNullOrWhiteSpace(state) ? null : state.Trim();
 }
 
 public sealed class DialoguePreview
@@ -44,6 +51,7 @@ public sealed class DialoguePreview
     public int DialogueId { get; set; }
     public int CurrentLineId { get; set; }
     public int Step { get; set; }
+    public string? StoryState { get; set; }
     public long? StartedAtUnixMilliseconds { get; set; }
     public List<PreviewHistoryEntry> History { get; } = [];
 }
@@ -57,6 +65,7 @@ public sealed class PreviewHistoryEntry
     public required string Text { get; set; }
     public bool IsEnding { get; set; }
     public string? ChoiceText { get; set; }
+    public string? StoryState { get; set; }
 }
 
 public sealed class Account

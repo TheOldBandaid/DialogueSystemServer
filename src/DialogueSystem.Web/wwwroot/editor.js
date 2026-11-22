@@ -202,6 +202,11 @@ function choiceForm(choice, position) {
     <label>Ответ <input name="text" maxlength="500" required></label>
     <label>Следующая реплика <select name="targetLineId" required></select></label>
     <label>Позиция <input name="position" type="number" min="1" max="2147483647" required></label>
+    <details>
+      <summary>Состояние сюжета</summary>
+      <label>Доступен при состоянии <input name="requiredState" maxlength="40"></label>
+      <label>Новое состояние после выбора <input name="nextState" maxlength="40"></label>
+    </details>
     <div class="actions">
       <button>Сохранить вариант</button>
       <button type="button" name="target">Открыть цель</button>
@@ -210,6 +215,9 @@ function choiceForm(choice, position) {
   const fields = form.elements;
   fields.text.value = choice?.text ?? "";
   fields.position.value = choice?.position ?? position;
+  fields.requiredState.value = choice?.requiredState ?? "";
+  fields.nextState.value = choice?.nextState ?? "";
+  form.querySelector("details").open = Boolean(choice?.requiredState || choice?.nextState);
   setOptions(fields.targetLineId, state.lines, shortLabel, choice?.line.id);
   fields.target.hidden = !choice;
   fields.target.onclick = run(() => selectLine(choice.line.id));
@@ -229,7 +237,9 @@ function choiceForm(choice, position) {
     await api(choice ? `${base}/${choice.id}` : base, choice ? "PUT" : "POST", {
       text: fields.text.value,
       targetLineId: Number(fields.targetLineId.value),
-      position: Number(fields.position.value)
+      position: Number(fields.position.value),
+      requiredState: fields.requiredState.value.trim() || null,
+      nextState: fields.nextState.value.trim() || null
     });
     hideValidation();
     await selectLine(state.line.id);
@@ -342,7 +352,7 @@ async function showPreviewHistory(previewId) {
     const choice = document.createElement("strong");
     choice.textContent = step.choiceText ?? "Начало диалога";
     const line = document.createElement("p");
-    line.textContent = `${step.speaker} — ${step.text}${step.isEnding ? " · Конец диалога" : ""}`;
+    line.textContent = describePreviewLine(step, step.storyState);
     item.append(choice, line);
     return item;
   }));
@@ -361,10 +371,16 @@ async function requestPreview(route, body) {
   }
 }
 
+function describePreviewLine(line, storyState) {
+  const ending = line.isEnding ? " · Конец диалога" : "";
+  const state = storyState ? ` · Состояние сюжета — ${storyState}` : "";
+  return `${line.speaker} — ${line.text}${ending}${state}`;
+}
+
 function renderStep(step) {
   const host = byId("preview-step");
   const text = document.createElement("p");
-  text.textContent = `${step.line.speaker} — ${step.line.text}${step.line.isEnding ? " · Конец диалога" : ""}`;
+  text.textContent = describePreviewLine(step.line, step.storyState);
   const actions = document.createElement("div");
   actions.className = "actions";
   for (const choice of step.choices) {

@@ -88,7 +88,7 @@ public sealed class PreviewHistoryTests
         var end = new DialogueLine { Speaker = speaker, Text = "До встречи.", IsEnding = true };
         var account = new Account { Login = "editor", Role = "Editor", PasswordHash = "" };
         account.PasswordHash = new PasswordHasher<Account>().HashPassword(account, editorPassword);
-        var choice = new DialogueChoice { Text = "Попрощаться", Position = 1 };
+        const string farewell = "Попрощаться";
 
         await using (var db = new DialogueDbContext(options))
         {
@@ -97,11 +97,9 @@ public sealed class PreviewHistoryTests
             db.AddRange(dialogue, account);
             await db.SaveChangesAsync();
             dialogue.StartLineId = start.Id;
-            choice.DialogueId = dialogue.Id;
-            choice.SourceLineId = start.Id;
-            choice.TargetLineId = end.Id;
-            db.Choices.Add(choice);
             await db.SaveChangesAsync();
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"INSERT INTO Choices (DialogueId, SourceLineId, TargetLineId, Text, Position) VALUES ({dialogue.Id}, {start.Id}, {end.Id}, {farewell}, {1})");
             await db.Database.ExecuteSqlInterpolatedAsync(
                 $"INSERT INTO Previews (Id, UserId, DialogueId, CurrentLineId, Step) VALUES ({previewId}, {account.Id}, {dialogue.Id}, {start.Id}, {0})");
         }
@@ -114,11 +112,12 @@ public sealed class PreviewHistoryTests
         Assert.Null(session.StartedAtUnixMilliseconds);
         Assert.Empty((await editor.Get<PreviewHistory>($"{previews}/{previewId}/history")).Steps);
 
+        var context = await editor.Get<LineContext>($"{Dialogues}/{dialogue.Id}/lines/{start.Id}/context");
         var ended = await editor.Read<PreviewStep>(HttpMethod.Post, $"{previews}/{previewId}/choices",
-            payload: new SelectChoice(choice.Id, 0));
+            payload: new SelectChoice(Assert.Single(context.Outgoing).Id, 0));
         Assert.True(ended.Line.IsEnding);
         var history = await editor.Get<PreviewHistory>($"{previews}/{previewId}/history");
         Assert.Equal(1, history.CurrentStep);
-        Assert.Equal(new PreviewHistoryStep(1, end.Id, speaker.Name, end.Text, true, choice.Text), Assert.Single(history.Steps));
+        Assert.Equal(new PreviewHistoryStep(1, end.Id, speaker.Name, end.Text, true, farewell), Assert.Single(history.Steps));
     }
 }

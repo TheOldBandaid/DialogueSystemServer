@@ -46,7 +46,9 @@ internal static class DialogueImporter
             SourceLineId = lines[choice.SourceLineId].Id,
             TargetLineId = lines[choice.TargetLineId].Id,
             Text = choice.Text.Trim(),
-            Position = choice.Position
+            Position = choice.Position,
+            RequiredState = DialogueChoice.NormalizeStoryState(choice.RequiredState),
+            NextState = DialogueChoice.NormalizeStoryState(choice.NextState)
         }));
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);

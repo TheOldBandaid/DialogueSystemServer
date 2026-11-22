@@ -100,7 +100,8 @@ public sealed class DialoguesController(DialogueDbContext db) : ControllerBase
                 choice.TargetLineId,
                 Link = new ChoiceLink(choice.Id, choice.Text, choice.Position,
                     new LineSummary(neighbor.Id, neighbor.Speaker.Name, neighbor.Text,
-                        neighbor.IsEnding, neighbor.IsStoryBranch, neighbor.SpeakerId))
+                        neighbor.IsEnding, neighbor.IsStoryBranch, neighbor.SpeakerId),
+                    choice.RequiredState, choice.NextState)
             };
 
         var context = await db.Lines.AsSingleQuery()

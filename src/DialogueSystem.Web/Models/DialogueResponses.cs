@@ -6,7 +6,8 @@ public sealed record DialogueSummary(int Id, string Title, int? StartLineId, int
 
 public sealed record LineSummary(int Id, string Speaker, string Text, bool IsEnding, bool IsStoryBranch, int SpeakerId);
 
-public sealed record ChoiceLink(int Id, string Text, int Position, LineSummary Line);
+public sealed record ChoiceLink(
+    int Id, string Text, int Position, LineSummary Line, string? RequiredState = null, string? NextState = null);
 
 public sealed record LineContext(
     LineSummary Line,
@@ -27,11 +28,13 @@ public sealed record PreviewStep(
     int Step,
     LineSummary Line,
     IReadOnlyList<PreviewChoice> Choices,
-    IReadOnlyList<int> UnreachableLineIds);
+    IReadOnlyList<int> UnreachableLineIds,
+    string? StoryState = null);
 
 public sealed record PreviewSessionSummary(Guid PreviewId, int Step, long? StartedAtUnixMilliseconds);
 
-public sealed record PreviewHistoryStep(int Step, int LineId, string Speaker, string Text, bool IsEnding, string? ChoiceText);
+public sealed record PreviewHistoryStep(
+    int Step, int LineId, string Speaker, string Text, bool IsEnding, string? ChoiceText, string? StoryState = null);
 
 public sealed record PreviewHistory(Guid PreviewId, int CurrentStep, IReadOnlyList<PreviewHistoryStep> Steps);
 

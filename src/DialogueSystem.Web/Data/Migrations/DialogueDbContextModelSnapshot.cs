@@ -90,8 +90,14 @@ namespace DialogueSystem.Web.Data.Migrations
                     b.Property<int>("DialogueId")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("NextState")
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("Position")
                         .HasColumnType("INTEGER");
+
+                    b.Property<string>("RequiredState")
+                        .HasColumnType("TEXT");
 
                     b.Property<int>("SourceLineId")
                         .HasColumnType("INTEGER");
@@ -160,6 +166,9 @@ namespace DialogueSystem.Web.Data.Migrations
                     b.Property<int>("Step")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("StoryState")
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("UserId")
                         .HasColumnType("INTEGER");
 
@@ -191,6 +200,9 @@ namespace DialogueSystem.Web.Data.Migrations
 
                     b.Property<string>("Speaker")
                         .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("StoryState")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Text")

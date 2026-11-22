@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "title": "Дежурный сигнал",
+  "startLineId": 1,
+  "lines": [
+    {
+      "id": 1,
+      "speaker": "Лея",
+      "text": "Маяк подал сигнал раньше срока. Предупредим совет или сначала разберёмся сами?",
+      "isStoryBranch": true
+    },
+    {
+      "id": 2,
+      "speaker": "Лея",
+      "text": "Совет получил сообщение и прислал людей к воротам."
+    },
+    {
+      "id": 3,
+      "speaker": "Лея",
+      "text": "О сигнале пока знаем только мы. Я проведу тебя через старый причал."
+    },
+    {
+      "id": 4,
+      "speaker": "Лея",
+      "text": "Мы у сигнальной башни. Наверху кто-то меняет огни. Что дальше?"
+    },
+    {
+      "id": 5,
+      "speaker": "Лея",
+      "text": "Стража перекрыла выход. Теперь можно поговорить с тем, кто подавал сигналы.",
+      "isEnding": true
+    },
+    {
+      "id": 6,
+      "speaker": "Лея",
+      "text": "Мы поднялись незаметно. На площадке осталась записка с новым расписанием огней.",
+      "isEnding": true
+    }
+  ],
+  "choices": [
+    { "sourceLineId": 1, "targetLineId": 2, "text": "Предупредить совет", "position": 1, "nextState": "совет" },
+    { "sourceLineId": 1, "targetLineId": 3, "text": "Оставить сигнал в тайне", "position": 2, "nextState": "тайна" },
+    { "sourceLineId": 2, "targetLineId": 4, "text": "Дойти до башни", "position": 1 },
+    { "sourceLineId": 3, "targetLineId": 4, "text": "Дойти до башни", "position": 1 },
+    { "sourceLineId": 4, "targetLineId": 5, "text": "Позвать стражу", "position": 1, "requiredState": "совет" },
+    { "sourceLineId": 4, "targetLineId": 6, "text": "Подняться через причал", "position": 2, "requiredState": "тайна" }
+  ]
+}

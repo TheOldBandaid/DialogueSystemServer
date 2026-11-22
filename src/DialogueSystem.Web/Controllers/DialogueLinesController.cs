@@ -144,6 +144,8 @@ public sealed class DialogueLinesController(DialogueDbContext db) : ControllerBa
         choice.TargetLineId = input.TargetLineId;
         choice.Text = input.Text.Trim();
         choice.Position = input.Position;
+        choice.RequiredState = DialogueChoice.NormalizeStoryState(input.RequiredState);
+        choice.NextState = DialogueChoice.NormalizeStoryState(input.NextState);
         if (choiceId is null)
             db.Choices.Add(choice);
         await db.SaveChangesAsync(ct);
@@ -160,5 +162,7 @@ public sealed class DialogueLinesController(DialogueDbContext db) : ControllerBa
         [Required, StringLength(4000)] string Text, bool IsEnding, bool IsStoryBranch);
     public sealed record StartInput(int? LineId);
     public sealed record ChoiceInput([Range(1, int.MaxValue)] int TargetLineId,
-        [Required, StringLength(500)] string Text, [Range(1, int.MaxValue)] int Position);
+        [Required, StringLength(500)] string Text, [Range(1, int.MaxValue)] int Position,
+        [StringLength(DialogueChoice.MaximumStoryStateLength)] string? RequiredState = null,
+        [StringLength(DialogueChoice.MaximumStoryStateLength)] string? NextState = null);
 }
