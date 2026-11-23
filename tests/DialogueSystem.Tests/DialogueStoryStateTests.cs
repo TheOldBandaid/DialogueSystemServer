@@ -1,5 +1,6 @@
 using System.Text.Json;
-using DialogueSystem.Web.Models;
+using DialogueSystem.Application;
+using DialogueSystem.Domain;
 using static System.Net.HttpStatusCode;
 
 namespace DialogueSystem.Tests;

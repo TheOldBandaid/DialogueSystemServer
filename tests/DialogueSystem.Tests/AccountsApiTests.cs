@@ -1,8 +1,10 @@
-using DialogueSystem.Web.Data;
+using DialogueSystem.Application;
+using DialogueSystem.Domain;
+using DialogueSystem.Infrastructure.Data;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using static DialogueSystem.Web.Controllers.AccountsController;
 using static System.Net.HttpStatusCode;
 
 namespace DialogueSystem.Tests;
@@ -57,14 +59,19 @@ public sealed class AccountsApiTests
         var connection = new SqliteConnectionStringBuilder { DataSource = data.DatabasePath, ForeignKeys = true };
         var options = new DbContextOptionsBuilder<DialogueDbContext>().UseSqlite(connection.ToString()).Options;
         const string title = "Сторожевая башня";
+        var password = Guid.NewGuid().ToString("N");
         await using (var db = new DialogueDbContext(options))
         {
             await db.Database.MigrateAsync("20261120110136_InitialDialogueSchema");
             await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO Dialogues (Title) VALUES ({title})");
+            await db.Database.MigrateAsync("20261122204328_AddStoryState");
+            var existing = new Account { Login = "admin", Role = AccountRoles.Administrator, PasswordHash = "" };
+            var hash = new PasswordHasher<Account>().HashPassword(existing, password);
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"INSERT INTO Accounts (Login, Role, PasswordHash) VALUES ({existing.Login}, {existing.Role}, {hash})");
         }
 
-        var password = Guid.NewGuid().ToString("N");
-        await using (var app = data.Start(settings: [new("DialogueSystem:AdminPassword", password)]))
+        await using (var app = data.Start())
         {
             using var scope = app.Services.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<DialogueDbContext>();
@@ -76,6 +83,7 @@ public sealed class AccountsApiTests
             using var admin = new DialogueApiClient(app);
             await admin.Login("admin", password);
             Assert.Single(await admin.Get<AccountSummary[]>("/api/accounts"));
+            Assert.Equal(0, (await db.Accounts.SingleAsync()).SessionVersion);
         }
 
         await using (var app = data.Start(settings: [new("DialogueSystem:AdminPassword", Guid.NewGuid().ToString("N"))]))
@@ -83,6 +91,71 @@ public sealed class AccountsApiTests
             using var admin = new DialogueApiClient(app);
             await admin.Login("admin", password);
             Assert.Equal("Administrator", (await admin.Get<AccountSummary>("/api/accounts/me")).Role);
+        }
+    }
+
+    [Fact]
+    public async Task OnlyAdministratorCanCreateAnAccountWithAUniqueLogin()
+    {
+        using var data = new DialogueTestData();
+        var password = Guid.NewGuid().ToString("N");
+        await using var app = data.Start(settings:
+        [
+            new("DialogueSystem:AdminPassword", password),
+            new("DialogueSystem:EditorPassword", password)
+        ]);
+        using var guest = new DialogueApiClient(app);
+        using var editor = new DialogueApiClient(app);
+        using var admin = new DialogueApiClient(app);
+        await editor.Login("editor", password);
+        await admin.Login("admin", password);
+        const string accounts = "/api/accounts";
+        var input = new { login = "New.Editor", password, role = AccountRoles.Editor };
+
+        await guest.Expect(Unauthorized, HttpMethod.Post, accounts, input);
+        await editor.Expect(Forbidden, HttpMethod.Post, accounts, input);
+        await admin.Expect(BadRequest, HttpMethod.Post, accounts, input, includeToken: false);
+        await admin.Expect(BadRequest, HttpMethod.Post, accounts, input with { password = "short" });
+        var created = await admin.Read<AccountSummary>(HttpMethod.Post, accounts, Created, input);
+        Assert.Equal("new.editor", created.Login);
+        Assert.Equal(created, await admin.Get<AccountSummary>($"{accounts}/{created.Id}"));
+        await admin.Expect(Conflict, HttpMethod.Post, accounts, input with { login = "new.editor" });
+        await guest.Login(" NEW.EDITOR ", password);
+        Assert.Equal(created, await guest.Get<AccountSummary>($"{accounts}/me"));
+    }
+
+    [Fact]
+    public async Task ChangingPasswordRejectsOlderSessionsAndKeepsNewCredentialsAfterRestart()
+    {
+        using var data = new DialogueTestData();
+        var oldPassword = Guid.NewGuid().ToString("N");
+        var newPassword = Guid.NewGuid().ToString("N");
+        const string profile = "/api/accounts/me";
+        const string change = profile + "/password";
+        var input = new { currentPassword = oldPassword, newPassword };
+
+        await using (var app = data.Start(settings: [new("DialogueSystem:EditorPassword", oldPassword)]))
+        using (var editor = new DialogueApiClient(app))
+        using (var otherSession = new DialogueApiClient(app))
+        {
+            await editor.Login("editor", oldPassword);
+            await otherSession.Login("editor", oldPassword);
+            await editor.Expect(BadRequest, HttpMethod.Put, change, input, includeToken: false);
+            await editor.Expect(BadRequest, HttpMethod.Put, change, input with { currentPassword = "wrong" });
+            await editor.Expect(BadRequest, HttpMethod.Put, change, input with { newPassword = oldPassword });
+            Assert.Equal("editor", (await otherSession.Get<AccountSummary>(profile)).Login);
+
+            await editor.Expect(NoContent, HttpMethod.Put, change, input);
+            await editor.Expect(Unauthorized, HttpMethod.Get, profile);
+            await otherSession.Expect(Unauthorized, HttpMethod.Get, profile);
+        }
+
+        await using (var app = data.Start(settings: [new("DialogueSystem:EditorPassword", oldPassword)]))
+        using (var editor = new DialogueApiClient(app))
+        {
+            await editor.Login("editor", oldPassword, Unauthorized);
+            await editor.Login("editor", newPassword);
+            Assert.Equal(AccountRoles.Editor, (await editor.Get<AccountSummary>(profile)).Role);
         }
     }
 }

@@ -1,6 +1,7 @@
 using System.Text.Json;
-using DialogueSystem.Web.Data;
-using DialogueSystem.Web.Models;
+using DialogueSystem.Infrastructure.Data;
+using DialogueSystem.Application;
+using DialogueSystem.Domain;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -74,6 +75,6 @@ public sealed class DialogueLevelTests
         await editor.Expect(OK, HttpMethod.Post, preview, new PreviewInput(3));
     }
 
-    private WebApplicationFactory<DialogueDbContext> Start(DialogueTestData data) =>
+    private WebApplicationFactory<Program> Start(DialogueTestData data) =>
         data.Start(settings: [new("DialogueSystem:EditorPassword", password)]);
 }

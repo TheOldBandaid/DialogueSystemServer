@@ -1,5 +1,8 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/DialogueSystem.Domain/DialogueSystem.Domain.csproj" />
+    <Project Path="src/DialogueSystem.Application/DialogueSystem.Application.csproj" />
+    <Project Path="src/DialogueSystem.Infrastructure/DialogueSystem.Infrastructure.csproj" />
     <Project Path="src/DialogueSystem.Web/DialogueSystem.Web.csproj" />
   </Folder>
   <Folder Name="/tests/">

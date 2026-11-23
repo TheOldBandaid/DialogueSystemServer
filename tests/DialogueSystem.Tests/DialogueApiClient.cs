@@ -1,20 +1,20 @@
 using System.Net;
 using System.Net.Http.Json;
-using DialogueSystem.Web.Data;
 using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace DialogueSystem.Tests;
 
-internal sealed class DialogueApiClient(WebApplicationFactory<DialogueDbContext> app) : IDisposable
+internal sealed class DialogueApiClient(WebApplicationFactory<Program> app) : IDisposable
 {
     private readonly HttpClient client = app.CreateClient(new() { AllowAutoRedirect = false });
     private string? csrfToken;
 
-    public async Task Login(string login, string password)
+    public async Task Login(string login, string password, HttpStatusCode expected = HttpStatusCode.OK)
     {
         csrfToken = (await Get<CsrfResponse>("/api/accounts/csrf")).Token;
-        await Expect(HttpStatusCode.OK, HttpMethod.Post, "/api/accounts/login", new { login, password });
-        csrfToken = (await Get<CsrfResponse>("/api/accounts/csrf")).Token;
+        await Expect(expected, HttpMethod.Post, "/api/accounts/login", new { login, password });
+        if (expected == HttpStatusCode.OK)
+            csrfToken = (await Get<CsrfResponse>("/api/accounts/csrf")).Token;
     }
 
     public Task<T> Get<T>(string path) => Read<T>(HttpMethod.Get, path);

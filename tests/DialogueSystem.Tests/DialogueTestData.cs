@@ -1,4 +1,3 @@
-using DialogueSystem.Web.Data;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Configuration;
@@ -12,7 +11,7 @@ internal sealed class DialogueTestData : IDisposable
 
     public string DatabasePath => Path.Combine(directory.FullName, "dialogues.db");
 
-    public WebApplicationFactory<DialogueDbContext> Start(
+    public WebApplicationFactory<Program> Start(
         string? environment = null, params KeyValuePair<string, string?>[] settings) =>
         new DialogueApplication(directory.FullName, environment ?? Environments.Development, settings);
 
@@ -30,7 +29,7 @@ internal sealed class DialogueTestData : IDisposable
 
     private sealed class DialogueApplication(
         string dataDirectory, string environment, KeyValuePair<string, string?>[] settings)
-        : WebApplicationFactory<DialogueDbContext>
+        : WebApplicationFactory<Program>
     {
         protected override IHost CreateHost(IHostBuilder builder)
         {

@@ -1,5 +1,6 @@
-using DialogueSystem.Web.Data;
-using DialogueSystem.Web.Models;
+using DialogueSystem.Infrastructure.Data;
+using DialogueSystem.Application;
+using DialogueSystem.Domain;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;

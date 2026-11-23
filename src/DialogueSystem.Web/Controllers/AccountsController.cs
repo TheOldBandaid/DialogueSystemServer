@@ -1,20 +1,15 @@
 using System.ComponentModel.DataAnnotations;
-using System.Security.Claims;
-using DialogueSystem.Web.Data;
-using DialogueSystem.Web.Models;
+using DialogueSystem.Application;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace DialogueSystem.Web.Controllers;
 
 [ApiController]
 [Route("api/accounts")]
-public sealed class AccountsController(DialogueDbContext db, IPasswordHasher<Account> hasher) : ControllerBase
+public sealed class AccountsController(AccountService accounts) : ControllerBase
 {
     [HttpGet("csrf")]
     public IActionResult Csrf(IAntiforgery antiforgery)
@@ -27,22 +22,17 @@ public sealed class AccountsController(DialogueDbContext db, IPasswordHasher<Acc
     [ValidateAntiForgeryToken]
     public async Task<ActionResult<AccountSummary>> Login(LoginRequest request, CancellationToken cancellationToken)
     {
-        var login = request.Login.Trim().ToLowerInvariant();
-        var account = await db.Accounts.SingleOrDefaultAsync(item => item.Login == login, cancellationToken);
-        if (account is null || hasher.VerifyHashedPassword(account, account.PasswordHash, request.Password)
-            == PasswordVerificationResult.Failed)
-        {
+        var session = await accounts.AuthenticateAsync(request.Login, request.Password, cancellationToken);
+        if (session is null)
             return Unauthorized();
-        }
 
-        await HttpContext.SignInAsync(CreatePrincipal(account));
-        return Ok(new AccountSummary(account.Id, account.Login, account.Role));
+        await HttpContext.SignInAsync(SessionPrincipal.Create(session));
+        return Ok(session.Summary);
     }
 
     [HttpGet("me")]
     [Authorize]
-    public ActionResult<AccountSummary> Me() => new AccountSummary(
-        int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!), User.Identity!.Name!, User.FindFirstValue(ClaimTypes.Role)!);
+    public ActionResult<AccountSummary> Me() => SessionPrincipal.Summary(User);
 
     [HttpPost("logout")]
     [Authorize]
@@ -54,46 +44,83 @@ public sealed class AccountsController(DialogueDbContext db, IPasswordHasher<Acc
     }
 
     [HttpGet]
-    [Authorize(Roles = "Administrator")]
-    public async Task<IReadOnlyList<AccountSummary>> List(CancellationToken cancellationToken) =>
-        await db.Accounts.OrderBy(account => account.Login)
-            .Select(account => new AccountSummary(account.Id, account.Login, account.Role))
-            .ToListAsync(cancellationToken);
+    [Authorize(Roles = AccountRoles.Administrator)]
+    public Task<IReadOnlyList<AccountSummary>> List(CancellationToken cancellationToken) =>
+        accounts.ListAsync(cancellationToken);
 
-    [HttpPut("{id:int}/role")]
-    [Authorize(Roles = "Administrator")]
+    [HttpPost]
+    [Authorize(Roles = AccountRoles.Administrator)]
     [ValidateAntiForgeryToken]
-    public async Task<IActionResult> SetRole(int id, RoleRequest request, CancellationToken cancellationToken)
+    public async Task<ActionResult<AccountSummary>> Create(
+        CreateAccountRequest request, CancellationToken cancellationToken)
     {
-        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        var account = await db.Accounts.FindAsync([id], cancellationToken);
+        var account = await accounts.CreateAsync(request.Login, request.Password, request.Role, cancellationToken);
         if (account is null)
-        {
-            return NotFound();
-        }
+            return Conflict(new ProblemDetails { Detail = "Пользователь с таким именем уже существует." });
 
-        if (account.Role == "Administrator" && request.Role == "Editor"
-            && !await db.Accounts.AnyAsync(item => item.Id != id && item.Role == "Administrator", cancellationToken))
-        {
-            return Conflict(new ProblemDetails { Detail = "В системе должен остаться администратор." });
-        }
-
-        account.Role = request.Role;
-        await db.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        return NoContent();
+        return CreatedAtAction(nameof(Get), new { id = account.Id }, account);
     }
 
-    internal static ClaimsPrincipal CreatePrincipal(Account account) =>
-        new(new ClaimsIdentity(
-            [new(ClaimTypes.NameIdentifier, account.Id.ToString()), new(ClaimTypes.Name, account.Login),
-             new(ClaimTypes.Role, account.Role)], CookieAuthenticationDefaults.AuthenticationScheme));
+    [HttpGet("{id:int}")]
+    [Authorize(Roles = AccountRoles.Administrator)]
+    public async Task<ActionResult<AccountSummary>> Get(int id, CancellationToken cancellationToken)
+    {
+        var account = await accounts.GetSessionAsync(id, cancellationToken);
+        return account is null ? NotFound() : Ok(account.Summary);
+    }
+
+    [HttpPut("{id:int}/role")]
+    [Authorize(Roles = AccountRoles.Administrator)]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> SetRole(int id, RoleRequest request, CancellationToken cancellationToken) =>
+        await accounts.ChangeRoleAsync(id, request.Role, cancellationToken) switch
+        {
+            RoleChange.Changed => NoContent(),
+            RoleChange.NotFound => NotFound(),
+            RoleChange.LastAdministrator => Conflict(new ProblemDetails
+            {
+                Detail = "В системе должен остаться администратор."
+            }),
+            _ => throw new InvalidOperationException()
+        };
+
+    [HttpPut("me/password")]
+    [Authorize]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ChangePassword(PasswordRequest request, CancellationToken cancellationToken)
+    {
+        var change = await accounts.ChangePasswordAsync(
+            SessionPrincipal.UserId(User), request.CurrentPassword, request.NewPassword, cancellationToken);
+        if (change == PasswordChange.Changed)
+        {
+            await HttpContext.SignOutAsync();
+            return NoContent();
+        }
+
+        return change switch
+        {
+            PasswordChange.WrongPassword => BadRequest(new ProblemDetails { Detail = "Текущий пароль указан неверно." }),
+            PasswordChange.SamePassword => BadRequest(new ProblemDetails { Detail = "Укажите новый пароль." }),
+            PasswordChange.StaleAccount => Conflict(new ProblemDetails
+            {
+                Detail = "Пароль уже изменился. Войдите снова."
+            }),
+            _ => throw new InvalidOperationException()
+        };
+    }
 
     public sealed record LoginRequest(
         [Required, MaxLength(100)] string Login,
         [Required, MaxLength(512)] string Password);
 
-    public sealed record AccountSummary(int Id, string Login, string Role);
+    public sealed record CreateAccountRequest(
+        [Required, RegularExpression("[A-Za-z0-9][A-Za-z0-9._-]{2,99}")] string Login,
+        [Required, StringLength(512, MinimumLength = 12)] string Password,
+        [Required, RegularExpression(AccountRoles.Pattern)] string Role);
 
-    public sealed record RoleRequest([Required, RegularExpression("Administrator|Editor")] string Role);
+    public sealed record RoleRequest([Required, RegularExpression(AccountRoles.Pattern)] string Role);
+
+    public sealed record PasswordRequest(
+        [Required, MaxLength(512)] string CurrentPassword,
+        [Required, StringLength(512, MinimumLength = 12)] string NewPassword);
 }

@@ -1,10 +1,8 @@
 using System.ComponentModel.DataAnnotations;
 using System.Text.Json.Serialization;
-using DialogueSystem.Web.Data;
-using DialogueSystem.Web.Models;
+using DialogueSystem.Application;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 
 namespace DialogueSystem.Web.Controllers;
 
@@ -12,144 +10,73 @@ namespace DialogueSystem.Web.Controllers;
 [Authorize]
 [AutoValidateAntiforgeryToken]
 [Route("api/dialogues")]
-public sealed class DialoguesController(DialogueDbContext db) : ControllerBase
+public sealed class DialoguesController(IDialogueCatalog catalog) : ControllerBase
 {
     [HttpGet]
-    public async Task<IReadOnlyList<DialogueSummary>> List(CancellationToken cancellationToken) =>
-        await db.Dialogues.OrderBy(dialogue => dialogue.Title)
-            .Select(dialogue => new DialogueSummary(dialogue.Id, dialogue.Title, dialogue.StartLineId, dialogue.MinimumPlayerLevel))
-            .ToListAsync(cancellationToken);
+    public Task<IReadOnlyList<DialogueSummary>> List(CancellationToken cancellationToken) =>
+        catalog.ListAsync(cancellationToken);
 
     [HttpGet("{id:int}")]
     public async Task<ActionResult<DialogueSummary>> Get(int id, CancellationToken cancellationToken)
     {
-        var dialogue = await db.Dialogues.FindAsync([id], cancellationToken);
-        return dialogue is null ? NotFound() : Ok(new DialogueSummary(dialogue.Id, dialogue.Title, dialogue.StartLineId, dialogue.MinimumPlayerLevel));
+        var dialogue = await catalog.FindAsync(id, cancellationToken);
+        return dialogue is null ? NotFound() : Ok(dialogue);
     }
 
     [HttpPost]
     public async Task<ActionResult<DialogueSummary>> Create(DialogueInput input, CancellationToken cancellationToken)
     {
-        var dialogue = new Dialogue { Title = input.Title.Trim() };
-        db.Dialogues.Add(dialogue);
-        await db.SaveChangesAsync(cancellationToken);
-        return CreatedAtAction(nameof(Get), new { id = dialogue.Id },
-            new DialogueSummary(dialogue.Id, dialogue.Title, dialogue.StartLineId, dialogue.MinimumPlayerLevel));
+        var created = await catalog.CreateAsync(input.Title, cancellationToken);
+        return CreatedAtAction(nameof(Get), new { id = created.Id }, created);
     }
 
     [HttpPut("{id:int}")]
-    public async Task<IActionResult> Update(int id, DialogueInput input, CancellationToken cancellationToken)
-    {
-        var title = input.Title.Trim();
-        var updated = await db.Dialogues.Where(dialogue => dialogue.Id == id).ExecuteUpdateAsync(
-            setters => setters.SetProperty(dialogue => dialogue.Title, title), cancellationToken);
-        return updated == 0 ? NotFound() : NoContent();
-    }
+    public async Task<IActionResult> Update(int id, DialogueInput input, CancellationToken cancellationToken) =>
+        await catalog.RenameAsync(id, input.Title, cancellationToken) ? NoContent() : NotFound();
 
     [HttpDelete("{id:int}")]
-    public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken)
-    {
-        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        var selected = db.Dialogues.Where(dialogue => dialogue.Id == id);
-        var updated = await selected.ExecuteUpdateAsync(
-            setters => setters.SetProperty(dialogue => dialogue.StartLineId, (int?)null), cancellationToken);
-        if (updated == 0)
-            return NotFound();
-
-        await db.Choices.Where(choice => choice.DialogueId == id).ExecuteDeleteAsync(cancellationToken);
-        await selected.ExecuteDeleteAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        return NoContent();
-    }
+    public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken) =>
+        await catalog.DeleteAsync(id, cancellationToken) ? NoContent() : NotFound();
 
     [HttpPut("{id:int}/minimum-level")]
-    public async Task<IActionResult> SetMinimumLevel(int id, MinimumLevelInput input, CancellationToken cancellationToken)
-    {
-        var dialogue = await db.Dialogues.FindAsync([id], cancellationToken);
-        if (dialogue is null)
-        {
-            return NotFound();
-        }
-
-        dialogue.MinimumPlayerLevel = input.MinimumPlayerLevel;
-        await db.SaveChangesAsync(cancellationToken);
-        return NoContent();
-    }
+    public async Task<IActionResult> SetMinimumLevel(int id, MinimumLevelInput input, CancellationToken cancellationToken) =>
+        await catalog.SetMinimumLevelAsync(id, input.MinimumPlayerLevel, cancellationToken) ? NoContent() : NotFound();
 
     [HttpGet("{id:int}/export")]
     public async Task<ActionResult<DialogueDocument>> Export(int id, CancellationToken cancellationToken)
     {
-        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        var graph = await DialogueGraphLoader.LoadAsync(db, id, cancellationToken);
-        return graph is null ? NotFound() : Ok(graph.ToDocument());
+        var document = await catalog.ExportAsync(id, cancellationToken);
+        return document is null ? NotFound() : Ok(document);
     }
 
     [HttpPost("import")]
     public async Task<ActionResult<DialogueSummary>> Import(DialogueDocument document, CancellationToken cancellationToken)
     {
-        var created = await DialogueImporter.SaveAsync(db, document, cancellationToken);
+        var created = await catalog.ImportAsync(document, cancellationToken);
         return CreatedAtAction(nameof(Get), new { id = created.Id }, created);
     }
-
-    public sealed record DialogueInput([Required, StringLength(160)] string Title);
-
-    public sealed record MinimumLevelInput([property: JsonRequired] [Range(1, int.MaxValue)] int? MinimumPlayerLevel);
 
     [HttpGet("{id:int}/lines/{lineId:int}/context")]
     public async Task<ActionResult<LineContext>> Context(int id, int lineId, CancellationToken cancellationToken)
     {
-        var neighbors =
-            from choice in db.Choices
-            where choice.DialogueId == id && (choice.SourceLineId == lineId || choice.TargetLineId == lineId)
-            let neighborId = choice.SourceLineId == lineId ? choice.TargetLineId : choice.SourceLineId
-            join neighbor in db.Lines
-                on new { choice.DialogueId, Id = neighborId } equals new { neighbor.DialogueId, neighbor.Id }
-            select new
-            {
-                choice.DialogueId,
-                choice.SourceLineId,
-                choice.TargetLineId,
-                Link = new ChoiceLink(choice.Id, choice.Text, choice.Position,
-                    new LineSummary(neighbor.Id, neighbor.Speaker.Name, neighbor.Text,
-                        neighbor.IsEnding, neighbor.IsStoryBranch, neighbor.SpeakerId),
-                    choice.RequiredState, choice.NextState)
-            };
-
-        var context = await db.Lines.AsSingleQuery()
-            .Where(line => line.DialogueId == id && line.Id == lineId)
-            .Select(line => new
-            {
-                Line = new LineSummary(line.Id, line.Speaker.Name, line.Text,
-                    line.IsEnding, line.IsStoryBranch, line.SpeakerId),
-                Neighbors = neighbors.Where(item => item.DialogueId == line.DialogueId).ToList()
-            })
-            .SingleOrDefaultAsync(cancellationToken);
-        if (context is null)
-        {
-            return NotFound();
-        }
-
-        var incoming = context.Neighbors.Where(item => item.TargetLineId == lineId)
-            .OrderBy(item => item.SourceLineId).ThenBy(item => item.Link.Position)
-            .Select(item => item.Link).ToArray();
-        var outgoing = context.Neighbors.Where(item => item.SourceLineId == lineId)
-            .OrderBy(item => item.Link.Position).Select(item => item.Link).ToArray();
-        return Ok(new LineContext(context.Line, incoming, outgoing));
+        var context = await catalog.ContextAsync(id, lineId, cancellationToken);
+        return context is null ? NotFound() : Ok(context);
     }
 
     [HttpGet("{id:int}/story-branches")]
     public async Task<ActionResult<IReadOnlyList<LineSummary>>> Branches(int id, CancellationToken cancellationToken)
     {
-        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        var graph = await DialogueGraphLoader.LoadAsync(db, id, cancellationToken);
-        return graph is null ? NotFound() : Ok(graph.GetStoryBranches());
+        var branches = await catalog.BranchesAsync(id, cancellationToken);
+        return branches is null ? NotFound() : Ok(branches);
     }
 
     [HttpGet("{id:int}/validation")]
     public async Task<ActionResult<DialogueValidation>> Validation(int id, CancellationToken cancellationToken)
     {
-        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        var graph = await DialogueGraphLoader.LoadAsync(db, id, cancellationToken);
-        return graph is null ? NotFound() : Ok(graph.Validate());
+        var validation = await catalog.ValidateAsync(id, cancellationToken);
+        return validation is null ? NotFound() : Ok(validation);
     }
+
+    public sealed record DialogueInput([Required, StringLength(160)] string Title);
+    public sealed record MinimumLevelInput([property: JsonRequired] [Range(1, int.MaxValue)] int? MinimumPlayerLevel);
 }

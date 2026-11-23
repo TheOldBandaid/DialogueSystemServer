@@ -1,0 +1,65 @@
+using DialogueSystem.Application;
+using DialogueSystem.Domain;
+using Microsoft.EntityFrameworkCore;
+
+namespace DialogueSystem.Infrastructure.Data;
+
+internal sealed class SqliteLines(DialogueDbContext db) : ILineStore
+{
+    public async Task<IStorageTransaction> BeginAsync(CancellationToken ct) =>
+        new SqliteTransaction(await db.Database.BeginTransactionAsync(ct));
+
+    public Task<bool> DialogueExistsAsync(int id, CancellationToken ct) =>
+        db.Dialogues.AnyAsync(dialogue => dialogue.Id == id, ct);
+
+    public async Task<Dialogue?> FindDialogueAsync(int id, CancellationToken ct) =>
+        await db.Dialogues.FindAsync([id], ct);
+
+    public Task<List<LineSummary>> ListAsync(int id, CancellationToken ct) =>
+        db.Lines.Where(line => line.DialogueId == id).OrderBy(line => line.Id)
+            .Select(line => new LineSummary(line.Id, line.Speaker.Name, line.Text, line.IsEnding,
+                line.IsStoryBranch, line.SpeakerId))
+            .ToListAsync(ct);
+
+    public Task<DialogueLine?> FindLineAsync(int id, int lineId, CancellationToken ct) =>
+        db.Lines.SingleOrDefaultAsync(line => line.DialogueId == id && line.Id == lineId, ct);
+
+    public Task<bool> LineExistsAsync(int id, int lineId, CancellationToken ct) =>
+        db.Lines.AnyAsync(line => line.DialogueId == id && line.Id == lineId, ct);
+
+    public async Task<Character?> FindCharacterAsync(int id, CancellationToken ct) =>
+        await db.Characters.FindAsync([id], ct);
+
+    public Task<bool> IsStartAsync(int id, int lineId, CancellationToken ct) =>
+        db.Dialogues.AnyAsync(dialogue => dialogue.Id == id && dialogue.StartLineId == lineId, ct);
+
+    public Task<bool> HasIncomingAsync(int id, int lineId, CancellationToken ct) =>
+        db.Choices.AnyAsync(choice => choice.DialogueId == id && choice.TargetLineId == lineId &&
+            choice.SourceLineId != lineId, ct);
+
+    public Task<bool> HasOutgoingAsync(int id, int lineId, CancellationToken ct) =>
+        db.Choices.AnyAsync(choice => choice.DialogueId == id && choice.SourceLineId == lineId, ct);
+
+    public Task<bool> PositionTakenAsync(int id, int lineId, int position, int exceptChoice, CancellationToken ct) =>
+        db.Choices.AnyAsync(choice => choice.DialogueId == id && choice.SourceLineId == lineId &&
+            choice.Position == position && choice.Id != exceptChoice, ct);
+
+    public Task<DialogueChoice?> FindChoiceAsync(int id, int lineId, int choiceId, CancellationToken ct) =>
+        db.Choices.SingleOrDefaultAsync(choice => choice.DialogueId == id &&
+            choice.SourceLineId == lineId && choice.Id == choiceId, ct);
+
+    public Task DeleteOutgoingAsync(int id, int lineId, CancellationToken ct) =>
+        db.Choices.Where(choice => choice.DialogueId == id && choice.SourceLineId == lineId).ExecuteDeleteAsync(ct);
+
+    public async Task<bool> DeleteChoiceAsync(int id, int lineId, int choiceId, CancellationToken ct)
+    {
+        var deleted = await db.Choices.Where(choice => choice.DialogueId == id &&
+            choice.SourceLineId == lineId && choice.Id == choiceId).ExecuteDeleteAsync(ct);
+        return deleted != 0;
+    }
+
+    public void AddLine(DialogueLine line) => db.Lines.Add(line);
+    public void RemoveLine(DialogueLine line) => db.Lines.Remove(line);
+    public void AddChoice(DialogueChoice choice) => db.Choices.Add(choice);
+    public Task SaveAsync(CancellationToken ct) => db.SaveChangesAsync(ct);
+}

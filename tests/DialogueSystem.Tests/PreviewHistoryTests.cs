@@ -1,5 +1,6 @@
-using DialogueSystem.Web.Data;
-using DialogueSystem.Web.Models;
+using DialogueSystem.Infrastructure.Data;
+using DialogueSystem.Application;
+using DialogueSystem.Domain;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -87,7 +88,7 @@ public sealed class PreviewHistoryTests
         var speaker = new Character { Name = "Стражник" };
         var start = new DialogueLine { Speaker = speaker, Text = "Пора идти." };
         var end = new DialogueLine { Speaker = speaker, Text = "До встречи.", IsEnding = true };
-        var account = new Account { Login = "editor", Role = "Editor", PasswordHash = "" };
+        var account = new Account { Id = 1, Login = "editor", Role = "Editor", PasswordHash = "" };
         account.PasswordHash = new PasswordHasher<Account>().HashPassword(account, editorPassword);
         const string farewell = "Попрощаться";
 
@@ -95,12 +96,14 @@ public sealed class PreviewHistoryTests
         {
             await db.Database.MigrateAsync("20261122123604_AddMinimumPlayerLevel");
             dialogue.Lines.AddRange([start, end]);
-            db.AddRange(dialogue, account);
+            db.Dialogues.Add(dialogue);
             await db.SaveChangesAsync();
             dialogue.StartLineId = start.Id;
             await db.SaveChangesAsync();
             await db.Database.ExecuteSqlInterpolatedAsync(
                 $"INSERT INTO Choices (DialogueId, SourceLineId, TargetLineId, Text, Position) VALUES ({dialogue.Id}, {start.Id}, {end.Id}, {farewell}, {1})");
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"INSERT INTO Accounts (Id, Login, Role, PasswordHash) VALUES ({account.Id}, {account.Login}, {account.Role}, {account.PasswordHash})");
             await db.Database.ExecuteSqlInterpolatedAsync(
                 $"INSERT INTO Previews (Id, UserId, DialogueId, CurrentLineId, Step) VALUES ({previewId}, {account.Id}, {dialogue.Id}, {start.Id}, {0})");
         }

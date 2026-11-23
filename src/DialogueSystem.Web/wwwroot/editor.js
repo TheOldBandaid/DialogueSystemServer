@@ -9,6 +9,8 @@ const previewHistory = byId("preview-history");
 const previewSessions = byId("preview-sessions");
 const historyDate = new Intl.DateTimeFormat("ru-RU", { dateStyle: "short", timeStyle: "medium" });
 const accountAdmin = byId("account-admin");
+const newAccountForm = byId("new-account");
+const passwordForm = byId("change-password");
 const roleLabels = { Editor: "Редактор", Administrator: "Администратор" };
 const state = { dialogue: null, lines: [], characters: [], line: null, token: "" };
 
@@ -58,6 +60,8 @@ async function refreshToken() {
 
 function showLogin() {
   showAccountManagement(null);
+  passwordForm.reset();
+  byId("my-account").open = false;
   resetPreviewHistory();
   workspace.hidden = true;
   byId("logout").hidden = true;
@@ -68,6 +72,7 @@ function showAccountManagement(profile) {
   accountAdmin.hidden = profile?.role !== "Administrator";
   if (accountAdmin.hidden) {
     accountAdmin.open = false;
+    newAccountForm.reset();
     byId("accounts-list").replaceChildren();
   }
 }
@@ -415,6 +420,22 @@ accountAdmin.ontoggle = () => {
   if (accountAdmin.open && !accountAdmin.hidden) refreshAccounts();
 };
 byId("refresh-accounts").onclick = refreshAccounts;
+newAccountForm.onsubmit = run(async () => {
+  const input = Object.fromEntries(new FormData(newAccountForm));
+  const account = await accountRequest("/api/accounts", "POST", input);
+  newAccountForm.reset();
+  await loadAccounts();
+  byId("status").textContent = `Пользователь «${account.login}» создан.`;
+});
+passwordForm.onsubmit = run(async () => {
+  const { currentPassword, newPassword, confirmation } = Object.fromEntries(new FormData(passwordForm));
+  if (newPassword !== confirmation) throw new Error("Новые пароли не совпадают.");
+
+  await api("/api/accounts/me/password", "PUT", { currentPassword, newPassword });
+  byId("preview-step").replaceChildren();
+  showLogin();
+  byId("status").textContent = "Пароль изменён. Войдите с новым паролем.";
+});
 
 login.onsubmit = run(async () => {
   await refreshToken();

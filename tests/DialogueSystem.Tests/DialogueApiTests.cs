@@ -1,11 +1,11 @@
 using System.Text.Json;
-using DialogueSystem.Web.Data;
-using DialogueSystem.Web.Models;
+using DialogueSystem.Infrastructure.Data;
+using DialogueSystem.Application;
+using DialogueSystem.Domain;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using static DialogueSystem.Web.Controllers.AccountsController;
 using static System.Net.HttpStatusCode;
 
 namespace DialogueSystem.Tests;
@@ -219,7 +219,7 @@ public sealed class DialogueApiTests
         Assert.True(await db.Characters.AnyAsync(character => character.Id == preview.Line.SpeakerId));
     }
 
-    private WebApplicationFactory<DialogueDbContext> Start(DialogueTestData data) =>
+    private WebApplicationFactory<Program> Start(DialogueTestData data) =>
         data.Start(Environments.Development,
             new("DialogueSystem:AdminPassword", adminPassword), new("DialogueSystem:EditorPassword", editorPassword));
 }
