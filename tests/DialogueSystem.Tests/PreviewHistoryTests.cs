@@ -29,7 +29,8 @@ public sealed class PreviewHistoryTests
         {
             await editor.Login("editor", editorPassword);
             await admin.Login("admin", adminPassword);
-            var dialogue = Assert.Single(await editor.Get<DialogueSummary[]>(Dialogues));
+            var dialogue = Assert.Single(await editor.Get<DialogueSummary[]>(Dialogues),
+                item => item.Title == "Ключ от архива");
             var path = $"{Dialogues}/{dialogue.Id}";
             previews = $"{path}/previews";
             Assert.Empty(await editor.Get<PreviewSessionSummary[]>(previews));

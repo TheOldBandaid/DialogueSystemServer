@@ -73,13 +73,6 @@ public sealed class DialoguesController(DialogueDbContext db) : ControllerBase
         return graph is null ? NotFound() : Ok(graph.ToDocument());
     }
 
-    [HttpPost("examples/rooftop-date")]
-    public async Task<ActionResult<DialogueSummary>> AddRooftopDate(CancellationToken cancellationToken)
-    {
-        var created = await DemoDialogue.AddRooftopDateAsync(db, cancellationToken);
-        return CreatedAtAction(nameof(Get), new { id = created.Id }, created);
-    }
-
     [HttpPost("import")]
     public async Task<ActionResult<DialogueSummary>> Import(DialogueDocument document, CancellationToken cancellationToken)
     {

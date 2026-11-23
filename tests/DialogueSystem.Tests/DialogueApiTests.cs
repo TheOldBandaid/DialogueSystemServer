@@ -30,7 +30,7 @@ public sealed class DialogueApiTests
 
         var spec = await editor.Get<JsonElement>("/openapi/v1.json");
         Assert.True(spec.GetProperty("paths").TryGetProperty("/api/dialogues/{id}/lines/{lineId}/choices", out _));
-        var demo = Assert.Single(await editor.Get<DialogueSummary[]>("/api/dialogues"));
+        var demo = Assert.Single(await editor.Get<DialogueSummary[]>("/api/dialogues"), item => item.Title == DemoTitle);
         var path = $"/api/dialogues/{demo.Id}";
         var branch = Assert.Single(await editor.Get<LineSummary[]>($"{path}/story-branches"));
         var context = await editor.Get<LineContext>($"{path}/lines/{branch.Id}/context");
@@ -77,7 +77,7 @@ public sealed class DialogueApiTests
         await using var app = Start(data);
         using var editor = new DialogueApiClient(app);
         await editor.Login("editor", editorPassword);
-        var speakerId = Assert.Single(await editor.Get<Character[]>("/api/characters")).Id;
+        var speakerId = Assert.Single(await editor.Get<Character[]>("/api/characters"), item => item.Name == "Марта").Id;
         var draft = await CreateDialogue("Архивный черновик");
         var other = await CreateDialogue("Другой диалог");
         var withoutStart = await editor.Read<DialogueValidation>(HttpMethod.Post, $"{draft}/previews", UnprocessableEntity);
@@ -149,7 +149,7 @@ public sealed class DialogueApiTests
         using var editor = new DialogueApiClient(app);
         await editor.Login("editor", editorPassword);
 
-        var demo = Assert.Single(await editor.Get<DialogueSummary[]>("/api/dialogues"));
+        var demo = Assert.Single(await editor.Get<DialogueSummary[]>("/api/dialogues"), item => item.Title == DemoTitle);
         var path = $"/api/dialogues/{demo.Id}";
         var branch = Assert.Single(await editor.Get<LineSummary[]>($"{path}/story-branches"));
         var startId = Assert.IsType<int>(demo.StartLineId);

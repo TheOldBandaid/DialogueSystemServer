@@ -16,8 +16,11 @@ public sealed class DialogueDatabaseTests
     {
         using var data = new DialogueTestData();
         const string editedText = "Архив откроется утром.";
+        const string rooftopTitle = "Кино после патруля";
+        const string editedRooftopTitle = "Вечерний сеанс";
         int dialogueId;
         int startId;
+        int rooftopId;
 
         await using (var app = data.Start())
         using (var scope = app.Services.CreateScope())
@@ -41,6 +44,9 @@ public sealed class DialogueDatabaseTests
             dialogueId = dialogue.Id;
             startId = start.Id;
             start.Text = editedText;
+            var rooftop = await db.Dialogues.SingleAsync(item => item.Title == rooftopTitle);
+            rooftopId = rooftop.Id;
+            rooftop.Title = editedRooftopTitle;
             await db.SaveChangesAsync();
         }
 
@@ -52,6 +58,9 @@ public sealed class DialogueDatabaseTests
             Assert.Equal(dialogueId, dialogue.Id);
             Assert.Equal(startId, dialogue.StartLineId);
             Assert.Equal(editedText, dialogue.Lines.Single(line => line.Id == startId).Text);
+            Assert.Equal(editedRooftopTitle, await db.Dialogues.Where(item => item.Id == rooftopId)
+                .Select(item => item.Title).SingleAsync());
+            Assert.False(await db.Dialogues.AnyAsync(item => item.Title == rooftopTitle));
         }
     }
 
@@ -63,7 +72,7 @@ public sealed class DialogueDatabaseTests
         using var scope = app.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<DialogueDbContext>();
         var firstChoice = await db.Choices.OrderBy(choice => choice.Id).FirstAsync();
-        var speaker = await db.Characters.SingleAsync();
+        var speaker = await db.Characters.SingleAsync(character => character.Name == "Марта");
         var otherDialogue = new Dialogue { Title = "Другой диалог" };
         var otherLine = new DialogueLine { Speaker = speaker, Text = "Чужая реплика" };
         otherDialogue.Lines.Add(otherLine);

@@ -6,18 +6,6 @@ namespace DialogueSystem.Web.Data;
 
 internal static class DemoDialogue
 {
-    public static async Task<DialogueSummary> AddRooftopDateAsync(
-        DialogueDbContext db, CancellationToken cancellationToken)
-    {
-        await using var resource = typeof(DemoDialogue).Assembly
-            .GetManifestResourceStream("DialogueSystem.Web.Demos.RooftopDate.json")
-            ?? throw new InvalidOperationException("Файл примера «Кино после патруля» отсутствует.");
-        var document = await JsonSerializer.DeserializeAsync<DialogueDocument>(
-            resource, JsonSerializerOptions.Web, cancellationToken)
-            ?? throw new InvalidOperationException("Не удалось прочитать пример «Кино после патруля».");
-        return await DialogueImporter.SaveAsync(db, document, cancellationToken);
-    }
-
     public static async Task SeedAsync(DialogueDbContext db, CancellationToken cancellationToken = default)
     {
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
@@ -46,6 +34,13 @@ internal static class DemoDialogue
             Link(2, 3, 1, "Возьму ключ"),
             Link(2, 4, 2, "Оставлю ключ у вас"));
         await db.SaveChangesAsync(cancellationToken);
+        await using var resource = typeof(DemoDialogue).Assembly
+            .GetManifestResourceStream("DialogueSystem.Web.Demos.RooftopDate.json")
+            ?? throw new InvalidOperationException("Файл примера «Кино после патруля» отсутствует.");
+        var document = await JsonSerializer.DeserializeAsync<DialogueDocument>(
+            resource, JsonSerializerOptions.Web, cancellationToken)
+            ?? throw new InvalidOperationException("Не удалось прочитать пример «Кино после патруля».");
+        await DialogueImporter.SaveWithinTransactionAsync(db, document, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
 
         DialogueChoice Link(int source, int target, int position, string text) => new()

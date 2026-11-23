@@ -263,14 +263,10 @@ async function openWorkspace(preferredDialogueId) {
   await loadDialogue(Number(byId("dialogues").value));
 }
 
-async function openNewDialogue(dialogue) {
-  byId("preview-step").replaceChildren();
-  await openWorkspace(dialogue.id);
-}
-
 async function importDialogue(data) {
   const created = await api("/api/dialogues/import", "POST", data);
-  await openNewDialogue(created);
+  byId("preview-step").replaceChildren();
+  await openWorkspace(created.id);
   return created;
 }
 
@@ -355,9 +351,7 @@ async function showPreviewHistory(previewId) {
     const item = document.createElement("li");
     const choice = document.createElement("strong");
     choice.textContent = step.choiceText ?? "Начало диалога";
-    const line = document.createElement("p");
-    line.textContent = describePreviewLine(step, step.storyState);
-    item.append(choice, line);
+    item.append(choice, renderPreviewLine(step, step.storyState));
     return item;
   }));
 }
@@ -375,16 +369,24 @@ async function requestPreview(route, body) {
   }
 }
 
-function describePreviewLine(line, storyState) {
+function renderPreviewLine(line, storyState) {
+  const message = document.createElement("div");
+  message.className = "preview-line";
+  const text = document.createElement("p");
   const ending = line.isEnding ? " · Конец диалога" : "";
-  const state = storyState ? ` · Состояние сюжета — ${storyState}` : "";
-  return `${line.speaker} — ${line.text}${ending}${state}`;
+  text.textContent = `${line.speaker} — ${line.text}${ending}`;
+  message.append(text);
+  if (storyState) {
+    const caption = document.createElement("small");
+    caption.className = "preview-story-state";
+    caption.textContent = `Состояние сюжета — ${storyState}`;
+    message.append(caption);
+  }
+  return message;
 }
 
 function renderStep(step) {
   const host = byId("preview-step");
-  const text = document.createElement("p");
-  text.textContent = describePreviewLine(step.line, step.storyState);
   const actions = document.createElement("div");
   actions.className = "actions";
   for (const choice of step.choices) {
@@ -395,7 +397,7 @@ function renderStep(step) {
     }));
     actions.append(button);
   }
-  host.replaceChildren(text, actions);
+  host.replaceChildren(renderPreviewLine(step.line, step.storyState), actions);
 }
 
 const refreshAccounts = run(loadAccounts);
@@ -427,11 +429,6 @@ byId("new-dialogue").onsubmit = run(async event => {
   form.reset();
   byId("preview-step").replaceChildren();
   await openWorkspace(dialogue.id);
-});
-byId("add-rooftop-date").onclick = run(async () => {
-  const dialogue = await api("/api/dialogues/examples/rooftop-date", "POST");
-  await openNewDialogue(dialogue);
-  byId("status").textContent = `Пример «${dialogue.title}» добавлен.`;
 });
 byId("import-dialogue").onsubmit = run(async event => {
   const form = event.currentTarget;

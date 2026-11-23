@@ -9,7 +9,14 @@ internal static class DialogueImporter
         DialogueDbContext db, DialogueDocument document, CancellationToken cancellationToken)
     {
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        var result = await SaveWithinTransactionAsync(db, document, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return result;
+    }
 
+    internal static async Task<DialogueSummary> SaveWithinTransactionAsync(
+        DialogueDbContext db, DialogueDocument document, CancellationToken cancellationToken)
+    {
         var names = document.Lines.Select(line => line.Speaker.Trim()).Distinct(StringComparer.Ordinal).ToArray();
         var existing = await db.Characters.Where(character => names.Contains(character.Name))
             .OrderBy(character => character.Id).ToListAsync(cancellationToken);
@@ -51,8 +58,6 @@ internal static class DialogueImporter
             NextState = DialogueChoice.NormalizeStoryState(choice.NextState)
         }));
         await db.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-
         return new DialogueSummary(dialogue.Id, dialogue.Title, dialogue.StartLineId, dialogue.MinimumPlayerLevel);
     }
 }

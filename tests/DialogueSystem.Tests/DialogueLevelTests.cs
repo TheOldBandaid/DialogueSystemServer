@@ -11,6 +11,7 @@ namespace DialogueSystem.Tests;
 public sealed class DialogueLevelTests
 {
     private const string Dialogues = "/api/dialogues";
+    private const string DemoTitle = "Ключ от архива";
     private readonly string password = Guid.NewGuid().ToString("N");
 
     [Fact]
@@ -20,7 +21,7 @@ public sealed class DialogueLevelTests
         await using var app = Start(data);
         using var editor = new DialogueApiClient(app);
         await editor.Login("editor", password);
-        var demo = Assert.Single(await editor.Get<DialogueSummary[]>(Dialogues));
+        var demo = Assert.Single(await editor.Get<DialogueSummary[]>(Dialogues), item => item.Title == DemoTitle);
         var route = $"{Dialogues}/{demo.Id}";
         var previews = $"{route}/previews";
         var setting = $"{route}/minimum-level";
@@ -58,7 +59,7 @@ public sealed class DialogueLevelTests
         await using var app = Start(data);
         using var editor = new DialogueApiClient(app);
         await editor.Login("editor", password);
-        var original = Assert.Single(await editor.Get<DialogueSummary[]>(Dialogues));
+        var original = Assert.Single(await editor.Get<DialogueSummary[]>(Dialogues), item => item.Title == DemoTitle);
         var route = $"{Dialogues}/{original.Id}";
 
         await editor.Expect(NoContent, HttpMethod.Put, $"{route}/minimum-level", new { minimumPlayerLevel = 3 });

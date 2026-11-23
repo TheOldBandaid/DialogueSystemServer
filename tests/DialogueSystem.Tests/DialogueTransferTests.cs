@@ -19,7 +19,9 @@ public sealed class DialogueTransferTests
         using var editor = new DialogueApiClient(app);
         await editor.Login("editor", password);
 
-        var original = Assert.Single(await editor.Get<DialogueSummary[]>(Dialogues));
+        var before = await editor.Get<DialogueSummary[]>(Dialogues);
+        var charactersBefore = await editor.Get<Character[]>(Characters);
+        var original = Assert.Single(before, item => item.Title == "Ключ от архива");
         var exportPath = $"{Dialogues}/{original.Id}/export";
         await guest.Expect(Unauthorized, HttpMethod.Get, exportPath);
         await editor.Expect(NotFound, HttpMethod.Get, $"{Dialogues}/0/export");
@@ -27,7 +29,7 @@ public sealed class DialogueTransferTests
         Assert.Equal(1, document.Version);
         await guest.Expect(Unauthorized, HttpMethod.Post, Import, document);
         await editor.Expect(BadRequest, HttpMethod.Post, Import, document, includeToken: false);
-        Assert.Single(await editor.Get<DialogueSummary[]>(Dialogues));
+        Assert.Equal(before, await editor.Get<DialogueSummary[]>(Dialogues));
 
         var copied = await editor.Read<DialogueSummary>(HttpMethod.Post, Import, Created,
             document with { Title = "Копия архива" });
@@ -51,7 +53,8 @@ public sealed class DialogueTransferTests
             TargetLineId = lineIds[choice.TargetLineId]
         }).OrderBy(choice => choice.SourceLineId).ThenBy(choice => choice.Position);
         Assert.Equal(expectedChoices, copy.Choices);
-        Assert.Single(await editor.Get<Character[]>(Characters));
+        var charactersAfter = await editor.Get<Character[]>(Characters);
+        Assert.Equal(charactersBefore.Select(character => character.Id), charactersAfter.Select(character => character.Id));
 
         var preview = await editor.Read<PreviewStep>(HttpMethod.Post, $"{copyPath}/previews");
         Assert.Equal(copy.StartLineId, preview.Line.Id);
@@ -123,8 +126,11 @@ public sealed class DialogueTransferTests
             _ => throw new ArgumentOutOfRangeException(nameof(issue))
         };
 
+        var before = await editor.Get<DialogueSummary[]>(Dialogues);
+        var charactersBefore = await editor.Get<Character[]>(Characters);
         await editor.Expect(BadRequest, HttpMethod.Post, Import, invalid);
-        Assert.Equal("Ключ от архива", Assert.Single(await editor.Get<DialogueSummary[]>(Dialogues)).Title);
-        Assert.Equal("Марта", Assert.Single(await editor.Get<Character[]>(Characters)).Name);
+        Assert.Equal(before, await editor.Get<DialogueSummary[]>(Dialogues));
+        var charactersAfter = await editor.Get<Character[]>(Characters);
+        Assert.Equal(charactersBefore.Select(character => character.Id), charactersAfter.Select(character => character.Id));
     }
 }

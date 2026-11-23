@@ -25,8 +25,11 @@ li { margin-bottom: .4rem; overflow-wrap: anywhere; }
 #accounts-list { list-style: none; padding: 0; }
 .account-role { margin: 0; }
 .account-role label { grid-template-columns: minmax(5rem, 1fr) minmax(0, 11rem); align-items: center; margin: 0; }
+.preview-line { margin: .75rem 0; overflow-wrap: anywhere; }
+.preview-line p { margin: 0; }
+.preview-story-state { display: block; margin-top: .2rem; color: #59656e; font-size: .875rem; }
 #preview-history { margin-top: 1rem; }
 #preview-history summary { cursor: pointer; margin-bottom: .65rem; }
-#preview-history-steps p { margin: .25rem 0 .65rem; }
+#preview-history-steps .preview-line { margin: .25rem 0 .65rem; }
 [hidden] { display: none !important; }
 @media (max-width: 680px) { .columns { grid-template-columns: 1fr; } }
