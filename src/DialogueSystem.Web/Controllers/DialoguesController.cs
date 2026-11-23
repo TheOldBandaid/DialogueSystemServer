@@ -40,14 +40,25 @@ public sealed class DialoguesController(DialogueDbContext db) : ControllerBase
     [HttpPut("{id:int}")]
     public async Task<IActionResult> Update(int id, DialogueInput input, CancellationToken cancellationToken)
     {
-        var dialogue = await db.Dialogues.FindAsync([id], cancellationToken);
-        if (dialogue is null)
-        {
-            return NotFound();
-        }
+        var title = input.Title.Trim();
+        var updated = await db.Dialogues.Where(dialogue => dialogue.Id == id).ExecuteUpdateAsync(
+            setters => setters.SetProperty(dialogue => dialogue.Title, title), cancellationToken);
+        return updated == 0 ? NotFound() : NoContent();
+    }
 
-        dialogue.Title = input.Title.Trim();
-        await db.SaveChangesAsync(cancellationToken);
+    [HttpDelete("{id:int}")]
+    public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken)
+    {
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        var selected = db.Dialogues.Where(dialogue => dialogue.Id == id);
+        var updated = await selected.ExecuteUpdateAsync(
+            setters => setters.SetProperty(dialogue => dialogue.StartLineId, (int?)null), cancellationToken);
+        if (updated == 0)
+            return NotFound();
+
+        await db.Choices.Where(choice => choice.DialogueId == id).ExecuteDeleteAsync(cancellationToken);
+        await selected.ExecuteDeleteAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
         return NoContent();
     }
 

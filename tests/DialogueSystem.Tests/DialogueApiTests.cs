@@ -2,6 +2,8 @@ using System.Text.Json;
 using DialogueSystem.Web.Data;
 using DialogueSystem.Web.Models;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using static DialogueSystem.Web.Controllers.AccountsController;
 using static System.Net.HttpStatusCode;
@@ -170,6 +172,51 @@ public sealed class DialogueApiTests
         Assert.Equal(branch, Assert.Single(context.Incoming, choice => choice.Id == loop.Id).Line);
         Assert.Equal(branch, Assert.Single(context.Outgoing, choice => choice.Id == loop.Id).Line);
         await editor.Expect(NotFound, HttpMethod.Get, $"/api/dialogues/0/lines/{branch.Id}/context");
+    }
+
+    [Fact]
+    public async Task RenamesAndDeletesOnlyTheSelectedDialogueAndItsHistory()
+    {
+        using var data = new DialogueTestData();
+        await using var app = Start(data);
+        using var editor = new DialogueApiClient(app);
+        using var guest = new DialogueApiClient(app);
+        await editor.Login("editor", editorPassword);
+
+        const string dialoguesPath = "/api/dialogues";
+        var dialogues = await editor.Get<DialogueSummary[]>(dialoguesPath);
+        var original = Assert.Single(dialogues, item => item.Title == DemoTitle);
+        var other = Assert.Single(dialogues, item => item.Id != original.Id);
+        var route = $"{dialoguesPath}/{original.Id}";
+        var otherRoute = $"{dialoguesPath}/{other.Id}";
+        var preview = await editor.Read<PreviewStep>(HttpMethod.Post, $"{route}/previews");
+        var otherPreview = await editor.Read<PreviewStep>(HttpMethod.Post, $"{otherRoute}/previews");
+        var historyRoute = $"{route}/previews/{preview.PreviewId}/history";
+        var otherHistoryRoute = $"{otherRoute}/previews/{otherPreview.PreviewId}/history";
+        var history = await editor.Get<PreviewHistory>(historyRoute);
+        var otherHistory = await editor.Get<PreviewHistory>(otherHistoryRoute);
+
+        await guest.Expect(Unauthorized, HttpMethod.Delete, route);
+        await editor.Expect(BadRequest, HttpMethod.Delete, route, includeToken: false);
+        await editor.Expect(NoContent, HttpMethod.Put, route, new { title = " Архивная экспедиция " });
+        Assert.Equal(original with { Title = "Архивная экспедиция" }, await editor.Get<DialogueSummary>(route));
+        Assert.Equal(history.Steps.ToArray(), (await editor.Get<PreviewHistory>(historyRoute)).Steps.ToArray());
+
+        await editor.Expect(NoContent, HttpMethod.Delete, route);
+        await editor.Expect(NotFound, HttpMethod.Delete, route);
+        await editor.Expect(NotFound, HttpMethod.Get, route);
+        await editor.Expect(NotFound, HttpMethod.Get, historyRoute);
+        await editor.Expect(NotFound, HttpMethod.Put, route, new { title = "Архив" });
+        Assert.Equal(other, Assert.Single(await editor.Get<DialogueSummary[]>(dialoguesPath)));
+        Assert.Equal(otherHistory.Steps.ToArray(), (await editor.Get<PreviewHistory>(otherHistoryRoute)).Steps.ToArray());
+
+        using var scope = app.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<DialogueDbContext>();
+        Assert.False(await db.Lines.AnyAsync(line => line.DialogueId == original.Id));
+        Assert.False(await db.Choices.AnyAsync(choice => choice.DialogueId == original.Id));
+        Assert.False(await db.Previews.AnyAsync(item => item.Id == preview.PreviewId));
+        Assert.False(await db.Set<PreviewHistoryEntry>().AnyAsync(step => step.PreviewId == preview.PreviewId));
+        Assert.True(await db.Characters.AnyAsync(character => character.Id == preview.Line.SpeakerId));
     }
 
     private WebApplicationFactory<DialogueDbContext> Start(DialogueTestData data) =>

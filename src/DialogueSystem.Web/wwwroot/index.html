@@ -47,6 +47,14 @@
         </form>
       </details>
       <section id="dialogue">
+        <details class="dialogue-actions">
+          <summary>Управление диалогом</summary>
+          <form id="rename-dialogue" class="actions">
+            <label>Название <input name="title" maxlength="160" required></label>
+            <button>Сохранить название</button>
+            <button type="button" id="delete-dialogue">Удалить диалог</button>
+          </form>
+        </details>
         <div class="actions dialogue-actions">
           <button type="button" id="copy-dialogue">Копировать диалог</button>
           <button type="button" id="export-dialogue">Скачать JSON</button>

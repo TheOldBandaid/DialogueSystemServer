@@ -1,6 +1,7 @@
 const byId = id => document.getElementById(id);
 const login = byId("login");
 const workspace = byId("workspace");
+const renameDialogueForm = byId("rename-dialogue");
 const lineForm = byId("line-form");
 const minimumLevelForm = byId("minimum-level");
 const previewForm = byId("preview-form");
@@ -158,6 +159,7 @@ async function loadDialogue(id, preferredLineId) {
     resetPreviewHistory();
   }
   state.dialogue = dialogue;
+  renameDialogueForm.elements.title.value = dialogue.title;
   renderLevelSettings();
   state.lines = lines;
   listLinks("lines", lines, "Реплик пока нет.");
@@ -247,20 +249,28 @@ function choiceForm(choice, position) {
   return form;
 }
 
-async function openWorkspace(preferredDialogueId) {
+async function openWorkspace(preferredDialogueId, preferredLineId) {
   const [dialogues, characters] = await Promise.all([api("/api/dialogues"), api("/api/characters")]);
   state.characters = characters;
-  setOptions(byId("dialogues"), dialogues, dialogue => dialogue.title, preferredDialogueId);
+  const select = byId("dialogues");
+  const preferred = dialogues.find(dialogue => dialogue.id === preferredDialogueId);
+  setOptions(select, dialogues, dialogue => dialogue.title, preferred?.id);
+  select.disabled = dialogues.length === 0;
   login.hidden = true;
   workspace.hidden = false;
   byId("logout").hidden = false;
   byId("dialogue").hidden = dialogues.length === 0;
   byId("preview").hidden = dialogues.length === 0;
   if (dialogues.length === 0) {
+    state.dialogue = null;
+    state.lines = [];
+    state.line = null;
+    previewForm.reset();
+    resetPreviewHistory();
     byId("status").textContent = "Создайте диалог, чтобы начать редактирование.";
     return;
   }
-  await loadDialogue(Number(byId("dialogues").value));
+  await loadDialogue(Number(select.value), preferred ? preferredLineId : undefined);
 }
 
 async function importDialogue(data) {
@@ -429,6 +439,21 @@ byId("new-dialogue").onsubmit = run(async event => {
   form.reset();
   byId("preview-step").replaceChildren();
   await openWorkspace(dialogue.id);
+});
+renameDialogueForm.onsubmit = run(async () => {
+  const id = state.dialogue.id;
+  await api(path(), "PUT", { title: renameDialogueForm.elements.title.value });
+  await openWorkspace(id, state.line?.id);
+  if (state.dialogue?.id === id) byId("status").textContent = `Диалог переименован в «${state.dialogue.title}».`;
+});
+byId("delete-dialogue").onclick = run(async () => {
+  const title = state.dialogue.title;
+  if (!window.confirm(`Удалить диалог «${title}», его реплики, переходы и историю прохождений?`)) return;
+
+  await api(path(), "DELETE");
+  byId("preview-step").replaceChildren();
+  await openWorkspace();
+  if (state.dialogue) byId("status").textContent = `Диалог «${title}» удалён.`;
 });
 byId("import-dialogue").onsubmit = run(async event => {
   const form = event.currentTarget;
