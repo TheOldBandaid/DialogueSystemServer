@@ -38,7 +38,6 @@ await using (var scope = app.Services.CreateAsyncScope())
         await accounts.CreateAsync("editor", editorPassword, AccountRoles.Editor, CancellationToken.None);
 }
 
-app.UseDefaultFiles();
 app.UseStaticFiles();
 app.UseAuthentication();
 app.UseAuthorization();

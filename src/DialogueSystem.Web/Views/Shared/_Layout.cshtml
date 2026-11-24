@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>@ViewData["Title"]</title>
+  <link rel="stylesheet" href="/editor.css">
+</head>
+<body>
+  <header>
+    <h1>@ViewData["Title"]</h1>
+    <button id="logout" hidden>Выйти</button>
+  </header>
+  <main>
+    <p id="status" role="status"></p>
+    <form id="login" hidden>
+      <label>Имя пользователя <input name="login" autocomplete="username" required></label>
+      <label>Пароль <input name="password" type="password" autocomplete="current-password" required></label>
+      <button>Войти</button>
+    </form>
+    <div id="workspace" hidden>
+      <details id="my-account">
+        <summary>Моя учётная запись</summary>
+        <form id="change-password" class="actions">
+          <label>Текущий пароль
+            <input type="password" name="currentPassword" autocomplete="current-password" maxlength="512" required>
+          </label>
+          <label>Новый пароль
+            <input type="password" name="newPassword" autocomplete="new-password" minlength="12" maxlength="512" required>
+          </label>
+          <label>Повтор нового пароля
+            <input type="password" name="confirmation" autocomplete="new-password" minlength="12" maxlength="512" required>
+          </label>
+          <button>Сменить пароль</button>
+        </form>
+      </details>
+      <details id="account-admin" hidden>
+        <summary>Учётные записи</summary>
+        <form id="new-account" class="actions">
+          <label>Логин
+            <input name="login" pattern="[A-Za-z0-9][A-Za-z0-9._\-]{2,99}"
+              title="От 3 до 100 латинских букв, цифр, точек, дефисов или подчёркиваний"
+              autocomplete="off" required>
+          </label>
+          <label>Пароль
+            <input type="password" name="password" autocomplete="new-password" minlength="12" maxlength="512" required>
+          </label>
+          <label>Роль
+            <select name="role">
+              <option value="Editor">Редактор</option>
+              <option value="Administrator">Администратор</option>
+            </select>
+          </label>
+          <button>Создать пользователя</button>
+        </form>
+        <ul id="accounts-list"></ul>
+        <button id="refresh-accounts" type="button">Обновить список</button>
+      </details>
+      @RenderBody()
+    </div>
+  </main>
+  @await RenderSectionAsync("Scripts", required: true)
+</body>
+</html>

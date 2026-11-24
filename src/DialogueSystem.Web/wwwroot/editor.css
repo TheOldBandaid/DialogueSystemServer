@@ -17,7 +17,19 @@ ul { padding-left: 1.25rem; }
 li { margin-bottom: .4rem; overflow-wrap: anywhere; }
 .choice { border-top: 1px solid #d6dfdb; padding-top: .75rem; }
 #status { color: #8a3120; overflow-wrap: anywhere; }
-#dialogues { width: min(100%, 30rem); }
+.catalog-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 17rem), 1fr));
+  gap: .75rem;
+  padding: 0;
+  list-style: none;
+}
+.catalog-list li { margin: 0; padding: .85rem; border: 1px solid #c6d0ca; border-radius: .25rem; }
+.catalog-list h3 { margin: 0; font-size: 1rem; }
+.catalog-detail { margin: .4rem 0 .75rem; color: #59656e; font-size: .875rem; }
+.catalog-list dl { display: grid; grid-template-columns: repeat(3, 1fr); gap: .5rem; margin: 0; }
+.catalog-list dt { font-size: .875rem; }
+.catalog-list dd { margin: .12rem 0 0; font-weight: 600; }
 .dialogue-actions { margin-bottom: 1rem; }
 #validation-report { border-inline-start: .25rem solid #759686; padding-inline-start: .85rem; margin-bottom: 1rem; }
 #account-admin, #my-account { border: 1px solid #c6d0ca; background: white; margin: 1rem 0; padding: .75rem; }

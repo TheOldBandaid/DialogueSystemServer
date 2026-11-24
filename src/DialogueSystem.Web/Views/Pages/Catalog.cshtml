@@ -1,0 +1,37 @@
+@{
+    Layout = "_Layout";
+    ViewData["Title"] = "Каталог диалогов";
+}
+
+<section class="catalog" aria-labelledby="catalog-heading">
+  <h2 id="catalog-heading">Диалоги</h2>
+  <details class="dialogue-actions">
+    <summary>Создать или загрузить диалог</summary>
+    <div class="columns">
+      <form id="new-dialogue">
+        <label>Название диалога <input name="title" maxlength="160" required></label>
+        <button>Создать диалог</button>
+      </form>
+      <form id="import-dialogue">
+        <label>Файл JSON <input name="file" type="file" accept=".json,application/json" required></label>
+        <button>Загрузить диалог</button>
+      </form>
+    </div>
+  </details>
+  <form id="catalog-filters" class="actions">
+    <label>Поиск по названию <input type="search" name="q" maxlength="160"></label>
+    <label>Стартовая реплика
+      <select name="start">
+        <option value="">Любая</option>
+        <option value="set">Задана</option>
+        <option value="unset">Не задана</option>
+      </select>
+    </label>
+  </form>
+  <p id="catalog-result" role="status"></p>
+  <ul id="catalog-items" class="catalog-list"></ul>
+</section>
+
+@section Scripts {
+    <script type="module" src="/catalog.js"></script>
+}

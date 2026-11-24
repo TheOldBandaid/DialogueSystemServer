@@ -16,6 +16,10 @@ public sealed class DialoguesController(IDialogueCatalog catalog) : ControllerBa
     public Task<IReadOnlyList<DialogueSummary>> List(CancellationToken cancellationToken) =>
         catalog.ListAsync(cancellationToken);
 
+    [HttpGet("overview")]
+    public Task<IReadOnlyList<DialogueOverview>> Overview(CancellationToken cancellationToken) =>
+        catalog.OverviewAsync(cancellationToken);
+
     [HttpGet("{id:int}")]
     public async Task<ActionResult<DialogueSummary>> Get(int id, CancellationToken cancellationToken)
     {

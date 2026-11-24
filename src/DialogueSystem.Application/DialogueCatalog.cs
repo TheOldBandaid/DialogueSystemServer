@@ -5,6 +5,7 @@ namespace DialogueSystem.Application;
 public interface IDialogueCatalog
 {
     Task<IReadOnlyList<DialogueSummary>> ListAsync(CancellationToken ct);
+    Task<IReadOnlyList<DialogueOverview>> OverviewAsync(CancellationToken ct);
     Task<DialogueSummary?> FindAsync(int id, CancellationToken ct);
     Task<DialogueSummary> CreateAsync(string title, CancellationToken ct);
     Task<bool> RenameAsync(int id, string title, CancellationToken ct);

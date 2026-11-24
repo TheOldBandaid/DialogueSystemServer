@@ -1,6 +1,6 @@
-const byId = id => document.getElementById(id);
-const login = byId("login");
-const workspace = byId("workspace");
+import { api, byId, dialogueUrl, initializeWorkspace, run } from "./workspace.js";
+
+const editorContent = byId("editor-content");
 const renameDialogueForm = byId("rename-dialogue");
 const lineForm = byId("line-form");
 const minimumLevelForm = byId("minimum-level");
@@ -8,117 +8,7 @@ const previewForm = byId("preview-form");
 const previewHistory = byId("preview-history");
 const previewSessions = byId("preview-sessions");
 const historyDate = new Intl.DateTimeFormat("ru-RU", { dateStyle: "short", timeStyle: "medium" });
-const accountAdmin = byId("account-admin");
-const newAccountForm = byId("new-account");
-const passwordForm = byId("change-password");
-const roleLabels = { Editor: "Редактор", Administrator: "Администратор" };
-const state = { dialogue: null, lines: [], characters: [], line: null, token: "" };
-
-async function api(path, method = "GET", body) {
-  const response = await fetch(path, {
-    method,
-    headers: method === "GET" ? {} : {
-      "X-CSRF-TOKEN": state.token,
-      "Content-Type": "application/json"
-    },
-    body: body === undefined ? undefined : JSON.stringify(body)
-  });
-  const result = response.headers.get("content-type")?.includes("json") ? await response.json() : null;
-  if (!response.ok) {
-    const validation = result?.errors;
-    const details = validation && Object.values(validation).flat().join(" ");
-    const message = response.status === 401 ? "Проверьте имя пользователя и пароль или войдите заново." :
-      result?.detail || details || `Запрос отклонён (HTTP ${response.status}).`;
-    throw Object.assign(new Error(message), { status: response.status, result });
-  }
-  return result;
-}
-
-function run(operation) {
-  return async event => {
-    event?.preventDefault();
-    workspace.inert = true;
-    login.inert = true;
-    byId("logout").disabled = true;
-    byId("status").textContent = "";
-    try {
-      await operation(event);
-    } catch (error) {
-      if (error.status === 401) showLogin();
-      byId("status").textContent = error.message;
-    } finally {
-      workspace.inert = false;
-      login.inert = false;
-      byId("logout").disabled = false;
-    }
-  };
-}
-
-async function refreshToken() {
-  state.token = (await api("/api/accounts/csrf")).token;
-}
-
-function showLogin() {
-  showAccountManagement(null);
-  passwordForm.reset();
-  byId("my-account").open = false;
-  resetPreviewHistory();
-  workspace.hidden = true;
-  byId("logout").hidden = true;
-  login.hidden = false;
-}
-
-function showAccountManagement(profile) {
-  accountAdmin.hidden = profile?.role !== "Administrator";
-  if (accountAdmin.hidden) {
-    accountAdmin.open = false;
-    newAccountForm.reset();
-    byId("accounts-list").replaceChildren();
-  }
-}
-
-async function accountRequest(route, method, body) {
-  try {
-    return await api(route, method, body);
-  } catch (error) {
-    if (error.status !== 403) throw error;
-    showAccountManagement(null);
-    throw new Error("Для управления ролями нужны права администратора.");
-  }
-}
-
-function accountRow(account) {
-  const row = document.createElement("li");
-  const form = document.createElement("form");
-  form.className = "actions account-role";
-  const label = document.createElement("label");
-  const loginName = document.createElement("span");
-  loginName.textContent = account.login;
-  const role = document.createElement("select");
-  role.setAttribute("aria-label", `Роль для ${account.login}`);
-  role.append(...Object.entries(roleLabels).map(([value, title]) => new Option(title, value)));
-  role.value = account.role;
-  label.append(loginName, role);
-  const save = document.createElement("button");
-  save.textContent = "Сохранить роль";
-  save.disabled = true;
-  role.onchange = () => { save.disabled = role.value === account.role; };
-
-  form.onsubmit = run(async () => {
-    await accountRequest(`/api/accounts/${account.id}/role`, "PUT", { role: role.value });
-    showAccountManagement(await api("/api/accounts/me"));
-    if (!accountAdmin.hidden) await loadAccounts();
-    byId("status").textContent = `Роль пользователя «${account.login}» обновлена.`;
-  });
-  form.append(label, save);
-  row.append(form);
-  return row;
-}
-
-async function loadAccounts() {
-  const accounts = await accountRequest("/api/accounts");
-  byId("accounts-list").replaceChildren(...accounts.map(accountRow));
-}
+const state = { dialogue: null, lines: [], characters: [], line: null };
 
 function setOptions(select, records, label, current) {
   select.replaceChildren(...records.map(item => new Option(label(item), item.id)));
@@ -164,18 +54,25 @@ async function loadDialogue(id, preferredLineId) {
     resetPreviewHistory();
   }
   state.dialogue = dialogue;
+  byId("dialogue-title").textContent = dialogue.title;
+  document.title = `${dialogue.title} — Редактор диалога`;
   renameDialogueForm.elements.title.value = dialogue.title;
   renderLevelSettings();
   state.lines = lines;
   listLinks("lines", lines, "Реплик пока нет.");
   listLinks("branches", branches, "Сюжетные развилки не отмечены.");
-  await selectLine(preferredLineId ?? branches[0]?.id ?? dialogue.startLineId ?? lines[0]?.id);
+  const preferred = lines.find(line => line.id === preferredLineId);
+  await selectLine(preferred?.id ?? branches[0]?.id ?? dialogue.startLineId ?? lines[0]?.id);
 }
 
 async function selectLine(id) {
   const context = id == null ? null : await api(`${path()}/lines/${id}/context`);
   state.line = context?.line ?? null;
   const line = state.line;
+  const url = new URL(location.href);
+  if (line) url.searchParams.set("line", line.id);
+  else url.searchParams.delete("line");
+  if (url.href !== location.href) history.replaceState(null, "", url);
   const isStart = line != null && line.id === state.dialogue.startLineId;
   byId("line-heading").textContent = line ? `Реплика №${line.id}${isStart ? " · старт" : ""}` : "Новая реплика";
   setOptions(lineForm.elements.speakerId, state.characters, character => character.name, line?.speakerId);
@@ -254,35 +151,21 @@ function choiceForm(choice, position) {
   return form;
 }
 
-async function openWorkspace(preferredDialogueId, preferredLineId) {
-  const [dialogues, characters] = await Promise.all([api("/api/dialogues"), api("/api/characters")]);
-  state.characters = characters;
-  const select = byId("dialogues");
-  const preferred = dialogues.find(dialogue => dialogue.id === preferredDialogueId);
-  setOptions(select, dialogues, dialogue => dialogue.title, preferred?.id);
-  select.disabled = dialogues.length === 0;
-  login.hidden = true;
-  workspace.hidden = false;
-  byId("logout").hidden = false;
-  byId("dialogue").hidden = dialogues.length === 0;
-  byId("preview").hidden = dialogues.length === 0;
-  if (dialogues.length === 0) {
-    state.dialogue = null;
-    state.lines = [];
-    state.line = null;
-    previewForm.reset();
-    resetPreviewHistory();
-    byId("status").textContent = "Создайте диалог, чтобы начать редактирование.";
+async function openEditor() {
+  const id = Number(editorContent.dataset.dialogueId);
+  const query = new URL(location.href).searchParams;
+  editorContent.hidden = true;
+  state.dialogue = null;
+  byId("preview-step").replaceChildren();
+  state.characters = await api("/api/characters");
+  try {
+    await loadDialogue(id, Number(query.get("line")));
+  } catch (error) {
+    if (error.status !== 404) throw error;
+    byId("status").textContent = "Диалог не найден. Его можно выбрать в каталоге.";
     return;
   }
-  await loadDialogue(Number(select.value), preferred ? preferredLineId : undefined);
-}
-
-async function importDialogue(data) {
-  const created = await api("/api/dialogues/import", "POST", data);
-  byId("preview-step").replaceChildren();
-  await openWorkspace(created.id);
-  return created;
+  editorContent.hidden = false;
 }
 
 function renderLevelSettings() {
@@ -415,87 +298,24 @@ function renderStep(step) {
   host.replaceChildren(renderPreviewLine(step.line, step.storyState), actions);
 }
 
-const refreshAccounts = run(loadAccounts);
-accountAdmin.ontoggle = () => {
-  if (accountAdmin.open && !accountAdmin.hidden) refreshAccounts();
-};
-byId("refresh-accounts").onclick = refreshAccounts;
-newAccountForm.onsubmit = run(async () => {
-  const input = Object.fromEntries(new FormData(newAccountForm));
-  const account = await accountRequest("/api/accounts", "POST", input);
-  newAccountForm.reset();
-  await loadAccounts();
-  byId("status").textContent = `Пользователь «${account.login}» создан.`;
-});
-passwordForm.onsubmit = run(async () => {
-  const { currentPassword, newPassword, confirmation } = Object.fromEntries(new FormData(passwordForm));
-  if (newPassword !== confirmation) throw new Error("Новые пароли не совпадают.");
-
-  await api("/api/accounts/me/password", "PUT", { currentPassword, newPassword });
-  byId("preview-step").replaceChildren();
-  showLogin();
-  byId("status").textContent = "Пароль изменён. Войдите с новым паролем.";
-});
-
-login.onsubmit = run(async () => {
-  await refreshToken();
-  const profile = await api("/api/accounts/login", "POST", Object.fromEntries(new FormData(login)));
-  login.reset();
-  await refreshToken();
-  showAccountManagement(profile);
-  await openWorkspace();
-});
-byId("logout").onclick = run(async () => {
-  await api("/api/accounts/logout", "POST");
-  byId("preview-step").replaceChildren();
-  showLogin();
-});
-byId("dialogues").onchange = run(async event => {
-  byId("preview-step").replaceChildren();
-  await loadDialogue(Number(event.target.value));
-});
-byId("new-dialogue").onsubmit = run(async event => {
-  const form = event.currentTarget;
-  const dialogue = await api("/api/dialogues", "POST", Object.fromEntries(new FormData(form)));
-  form.reset();
-  byId("preview-step").replaceChildren();
-  await openWorkspace(dialogue.id);
-});
 renameDialogueForm.onsubmit = run(async () => {
-  const id = state.dialogue.id;
   await api(path(), "PUT", { title: renameDialogueForm.elements.title.value });
-  await openWorkspace(id, state.line?.id);
-  if (state.dialogue?.id === id) byId("status").textContent = `Диалог переименован в «${state.dialogue.title}».`;
+  await loadDialogue(state.dialogue.id, state.line?.id);
+  byId("status").textContent = `Диалог переименован в «${state.dialogue.title}».`;
 });
 byId("delete-dialogue").onclick = run(async () => {
   const title = state.dialogue.title;
   if (!window.confirm(`Удалить диалог «${title}», его реплики, переходы и историю прохождений?`)) return;
 
   await api(path(), "DELETE");
-  byId("preview-step").replaceChildren();
-  await openWorkspace();
-  if (state.dialogue) byId("status").textContent = `Диалог «${title}» удалён.`;
-});
-byId("import-dialogue").onsubmit = run(async event => {
-  const form = event.currentTarget;
-  const raw = await form.elements.file.files[0].text();
-  let data;
-  try {
-    data = JSON.parse(raw.replace(/^\uFEFF/, ""));
-  } catch (error) {
-    if (!(error instanceof SyntaxError)) throw error;
-    throw new Error("Не удалось прочитать JSON. Проверьте содержимое файла.");
-  }
-  const created = await importDialogue(data);
-  form.reset();
-  byId("status").textContent = `Диалог «${created.title}» загружен.`;
+  location.assign("/");
 });
 byId("copy-dialogue").onclick = run(async () => {
   const data = await api(`${path()}/export`);
   const suffix = " (копия)";
   const title = data.title.length <= 160 - suffix.length ? data.title + suffix : "Копия диалога";
-  const created = await importDialogue({ ...data, title });
-  byId("status").textContent = `Создана копия «${created.title}».`;
+  const created = await api("/api/dialogues/import", "POST", { ...data, title });
+  location.assign(dialogueUrl(created.id));
 });
 byId("export-dialogue").onclick = run(async () => {
   const id = state.dialogue.id;
@@ -566,14 +386,4 @@ previewForm.onsubmit = run(async () => {
   await requestPreview(`${path()}/previews`, level.disabled ? undefined : { playerLevel: level.valueAsNumber });
 });
 
-await run(async () => {
-  try {
-    showAccountManagement(await api("/api/accounts/me"));
-  } catch (error) {
-    if (error.status !== 401) throw error;
-    showLogin();
-    return;
-  }
-  await refreshToken();
-  await openWorkspace();
-})();
+await initializeWorkspace(openEditor);

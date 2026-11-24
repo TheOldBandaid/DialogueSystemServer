@@ -4,6 +4,9 @@ namespace DialogueSystem.Application;
 
 public sealed record DialogueSummary(int Id, string Title, int? StartLineId, int? MinimumPlayerLevel = null);
 
+public sealed record DialogueOverview(int Id, string Title, bool HasStart, int? MinimumPlayerLevel,
+    int LineCount, int BranchCount, int EndingCount);
+
 public sealed record LineSummary(int Id, string Speaker, string Text, bool IsEnding, bool IsStoryBranch, int SpeakerId);
 
 public sealed record ChoiceLink(

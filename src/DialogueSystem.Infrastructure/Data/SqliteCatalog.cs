@@ -16,6 +16,13 @@ internal sealed class SqliteDialogueCatalog(DialogueDbContext db) : IDialogueCat
             .Select(dialogue => new DialogueSummary(dialogue.Id, dialogue.Title, dialogue.StartLineId,
                 dialogue.MinimumPlayerLevel)).SingleOrDefaultAsync(ct);
 
+    public async Task<IReadOnlyList<DialogueOverview>> OverviewAsync(CancellationToken ct) =>
+        await db.Dialogues.OrderBy(dialogue => dialogue.Title).ThenBy(dialogue => dialogue.Id)
+            .Select(dialogue => new DialogueOverview(dialogue.Id, dialogue.Title, dialogue.StartLineId != null,
+                dialogue.MinimumPlayerLevel, dialogue.Lines.Count,
+                dialogue.Lines.Count(line => line.IsStoryBranch), dialogue.Lines.Count(line => line.IsEnding)))
+            .ToListAsync(ct);
+
     public async Task<DialogueSummary> CreateAsync(string title, CancellationToken ct)
     {
         var dialogue = new Dialogue { Title = title.Trim() };
