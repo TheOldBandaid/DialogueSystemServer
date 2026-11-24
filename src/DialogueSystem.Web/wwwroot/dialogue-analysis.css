@@ -1,0 +1,17 @@
+.analysis-heading { justify-content: space-between; }
+.analysis-heading h2 { margin: 0; }
+#analysis-notice { color: #704b19; }
+.analysis-metrics { display: flex; flex-wrap: wrap; gap: .75rem; margin: 1rem 0; }
+.analysis-metrics div { flex: 1 1 9rem; background: #f4f6f5; border: 1px solid #c6d0ca; padding: .65rem; }
+.analysis-metrics dt { color: #43525a; font-size: .875rem; }
+.analysis-metrics dd { margin: .2rem 0 0; font-weight: 700; }
+.analysis-section { margin: 1rem 0 0; border-top: 1px solid #c6d0ca; padding: .7rem 0 0; }
+.analysis-section h3 { margin: 0 0 .5rem; }
+.analysis-section summary { cursor: pointer; font-weight: 600; }
+.analysis-rows { margin: .5rem 0; list-style: none; padding: 0; }
+.analysis-rows li { border-bottom: 1px solid #d6dfdb; padding: .6rem 0; }
+.analysis-rows li:last-child { border-bottom: 0; }
+.analysis-rows p, .ending-route li p { margin: .25rem 0; }
+.ending-route { padding: .75rem; border-inline-start: .25rem solid #23674f; background: #f4f6f5; }
+.ending-route h4 { margin: 0; }
+.ending-route li { padding: .35rem 0; }

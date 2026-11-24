@@ -127,11 +127,11 @@ public sealed class DialogueGraph(Dialogue dialogue, IReadOnlyList<DialogueChoic
 
     private IEnumerable<StoryPosition> NextPositions(StoryPosition position) =>
         AvailableChoices(position.LineId, position.State)
-            .Select(choice => new StoryPosition(choice.TargetLineId, choice.NextState ?? position.State));
+            .Select(choice => new StoryPosition(choice.TargetLineId, DialogueStoryRules.Advance(choice.NextState, position.State)));
 
     private IEnumerable<DialogueChoice> AvailableChoices(int lineId, string? state) =>
         _lines[lineId].IsEnding ? [] :
-            _outgoing[lineId].Where(choice => choice.RequiredState is null || choice.RequiredState == state);
+            _outgoing[lineId].Where(choice => DialogueStoryRules.Allows(choice.RequiredState, state));
 
     private static DialogueValidationIssue NoReachableEnding(int startLineId) =>
         new("no-reachable-ending", "От стартовой реплики нельзя добраться до концовки.", startLineId);

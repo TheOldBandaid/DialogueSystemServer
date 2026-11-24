@@ -76,7 +76,7 @@ public sealed class PreviewService(IPreviewStore store)
             return new(PreviewStatus.UnavailableChoice);
 
         preview.CurrentLineId = choice.TargetLineId;
-        preview.StoryState = choice.NextState ?? preview.StoryState;
+        preview.StoryState = DialogueStoryRules.Advance(choice.NextState, preview.StoryState);
         preview.Step++;
         var step = RecordStep(graph, preview, validation.UnreachableLineIds, choice.Text);
         await store.SaveAsync(ct);
