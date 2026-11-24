@@ -41,6 +41,44 @@ li { margin-bottom: .4rem; overflow-wrap: anywhere; }
 .preview-line { margin: .75rem 0; overflow-wrap: anywhere; }
 .preview-line p { margin: 0; }
 .preview-story-state { display: block; margin-top: .2rem; color: #59656e; font-size: .875rem; }
+.map-toolbar { margin: .65rem 0; color: #43525a; }
+.map-frame { position: relative; border: 1px solid #c6d0ca; border-radius: .25rem; background: #f4f6f5; overflow: hidden; }
+#map-edges { position: absolute; inset: 0 auto auto 0; pointer-events: none; }
+.map-viewport { position: relative; height: clamp(18rem, 55vh, 32rem); overflow: auto; }
+#map-nodes { position: relative; }
+.map-node {
+  position: absolute;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-rows: 1.15rem 1fr 1rem;
+  gap: .15rem;
+  padding: .42rem .65rem;
+  text-align: left;
+  background: #fff;
+  color: #17232c;
+  border: 1px solid #78958a;
+}
+.map-node[aria-pressed="true"] { border-color: #23674f; box-shadow: 0 0 0 2px #23674f; background: #e5f1eb; }
+.map-node-heading, .map-node-marker { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.map-node-heading { font-weight: 700; font-size: .85rem; }
+.map-node-text {
+  font-size: .83rem;
+  line-height: 1.05rem;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  align-self: center;
+  overflow: hidden;
+}
+.map-node-marker { color: #36584a; font-size: .75rem; }
+.map-selection-heading { margin-top: .75rem; }
+.map-selection-heading h3 { margin: 0; font-size: 1rem; }
+.map-transition-columns { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); gap: 0 1rem; }
+.map-transition-columns h4 { margin-bottom: .35rem; }
+.map-transition-columns ul { margin-top: 0; list-style: none; padding: 0; }
+.map-transition-columns li button { text-align: left; }
+.map-condition { display: block; margin-top: .2rem; color: #59656e; font-size: .875rem; }
 #preview-history { margin-top: 1rem; }
 #preview-history summary { cursor: pointer; margin-bottom: .65rem; }
 #preview-history-steps .preview-line { margin: .25rem 0 .65rem; }

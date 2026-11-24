@@ -1,4 +1,5 @@
 import { api, byId, dialogueUrl, initializeWorkspace, run } from "./workspace.js";
+import { createDialogueMap } from "./dialogue-map.js";
 
 const editorContent = byId("editor-content");
 const renameDialogueForm = byId("rename-dialogue");
@@ -17,6 +18,7 @@ function setOptions(select, records, label, current) {
 
 const path = () => `/api/dialogues/${state.dialogue.id}`;
 const linePath = () => `${path()}/lines/${state.line.id}`;
+const dialogueMap = createDialogueMap(() => api(`${path()}/export`), selectLine);
 const lineLabel = line => `№${line.id} · ${line.text}`;
 const shortLabel = line => {
   const label = lineLabel(line);
@@ -63,12 +65,14 @@ async function loadDialogue(id, preferredLineId) {
   listLinks("branches", branches, "Сюжетные развилки не отмечены.");
   const preferred = lines.find(line => line.id === preferredLineId);
   await selectLine(preferred?.id ?? branches[0]?.id ?? dialogue.startLineId ?? lines[0]?.id);
+  await dialogueMap.refresh();
 }
 
 async function selectLine(id) {
   const context = id == null ? null : await api(`${path()}/lines/${id}/context`);
   state.line = context?.line ?? null;
   const line = state.line;
+  dialogueMap.select(line?.id);
   const url = new URL(location.href);
   if (line) url.searchParams.set("line", line.id);
   else url.searchParams.delete("line");
@@ -131,6 +135,7 @@ function choiceForm(choice, position) {
       await api(`${linePath()}/choices/${choice.id}`, "DELETE");
       hideValidation();
       await selectLine(state.line.id);
+      await dialogueMap.refresh();
     } else {
       form.remove();
       byId("new-choice").hidden = false;
@@ -147,6 +152,7 @@ function choiceForm(choice, position) {
     });
     hideValidation();
     await selectLine(state.line.id);
+    await dialogueMap.refresh();
   });
   return form;
 }
@@ -155,6 +161,7 @@ async function openEditor() {
   const id = Number(editorContent.dataset.dialogueId);
   const query = new URL(location.href).searchParams;
   editorContent.hidden = true;
+  byId("show-map").hidden = true;
   state.dialogue = null;
   byId("preview-step").replaceChildren();
   state.characters = await api("/api/characters");
@@ -166,6 +173,8 @@ async function openEditor() {
     return;
   }
   editorContent.hidden = false;
+  byId("show-map").hidden = false;
+  if (location.hash === "#dialogue-map") byId("map-panel").open = true;
 }
 
 function renderLevelSettings() {
