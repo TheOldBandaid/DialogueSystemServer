@@ -184,6 +184,43 @@ namespace DialogueSystem.Infrastructure.Data.Migrations
                     b.ToTable("Previews");
                 });
 
+            modelBuilder.Entity("DialogueSystem.Domain.DialogueRevision", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Author")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("ChoiceCount")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("CreatedAtUnixMilliseconds")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("DialogueId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("DocumentJson")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("LineCount")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DialogueId", "Id");
+
+                    b.ToTable("DialogueRevisions");
+                });
+
             modelBuilder.Entity("DialogueSystem.Domain.PreviewHistoryEntry", b =>
                 {
                     b.Property<Guid>("PreviewId")
@@ -272,6 +309,15 @@ namespace DialogueSystem.Infrastructure.Data.Migrations
                         .WithMany()
                         .HasForeignKey("DialogueId", "CurrentLineId")
                         .HasPrincipalKey("DialogueId", "Id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("DialogueSystem.Domain.DialogueRevision", b =>
+                {
+                    b.HasOne("DialogueSystem.Domain.Dialogue", null)
+                        .WithMany()
+                        .HasForeignKey("DialogueId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

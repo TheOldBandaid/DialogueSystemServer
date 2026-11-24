@@ -79,6 +79,10 @@ li { margin-bottom: .4rem; overflow-wrap: anywhere; }
 .map-transition-columns ul { margin-top: 0; list-style: none; padding: 0; }
 .map-transition-columns li button { text-align: left; }
 .map-condition { display: block; margin-top: .2rem; color: #59656e; font-size: .875rem; }
+#save-revision { margin-top: .75rem; }
+.revision-list { list-style: none; padding: 0; }
+.revision-list li { padding: .6rem 0; border-top: 1px solid #d6dfdb; }
+.revision-list small { display: block; color: #59656e; margin: .25rem 0 .5rem; }
 #preview-history { margin-top: 1rem; }
 #preview-history summary { cursor: pointer; margin-bottom: .65rem; }
 #preview-history-steps .preview-line { margin: .25rem 0 .65rem; }

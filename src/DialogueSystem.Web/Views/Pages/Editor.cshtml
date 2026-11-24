@@ -62,6 +62,16 @@
         <button type="button" id="delete-dialogue">Удалить диалог</button>
       </form>
     </details>
+    <details id="revision-panel" class="dialogue-actions">
+      <summary>Версии диалога</summary>
+      <form id="save-revision" class="actions">
+        <label>Название версии <input name="label" maxlength="80" required></label>
+        <button>Сохранить версию</button>
+      </form>
+      <p id="revision-empty" hidden>Сохранённых версий пока нет.</p>
+      <ul id="revision-list" class="revision-list"></ul>
+      <button type="button" id="revision-more" hidden>Показать более ранние версии</button>
+    </details>
     <div class="actions dialogue-actions">
       <button type="button" id="copy-dialogue">Копировать диалог</button>
       <button type="button" id="export-dialogue">Скачать JSON</button>

@@ -1,5 +1,6 @@
-import { api, byId, dialogueUrl, initializeWorkspace, run } from "./workspace.js";
+import { api, byId, dialogueUrl, downloadJson, initializeWorkspace, run } from "./workspace.js";
 import { createDialogueMap } from "./dialogue-map.js";
+import { initializeRevisions } from "./dialogue-revisions.js";
 
 const editorContent = byId("editor-content");
 const renameDialogueForm = byId("rename-dialogue");
@@ -19,6 +20,7 @@ function setOptions(select, records, label, current) {
 const path = () => `/api/dialogues/${state.dialogue.id}`;
 const linePath = () => `${path()}/lines/${state.line.id}`;
 const dialogueMap = createDialogueMap(() => api(`${path()}/export`), selectLine);
+const refreshRevisions = initializeRevisions(path);
 const lineLabel = line => `№${line.id} · ${line.text}`;
 const shortLabel = line => {
   const label = lineLabel(line);
@@ -174,6 +176,7 @@ async function openEditor() {
   }
   editorContent.hidden = false;
   byId("show-map").hidden = false;
+  await refreshRevisions();
   if (location.hash === "#dialogue-map") byId("map-panel").open = true;
 }
 
@@ -314,7 +317,7 @@ renameDialogueForm.onsubmit = run(async () => {
 });
 byId("delete-dialogue").onclick = run(async () => {
   const title = state.dialogue.title;
-  if (!window.confirm(`Удалить диалог «${title}», его реплики, переходы и историю прохождений?`)) return;
+  if (!window.confirm(`Удалить диалог «${title}» вместе с репликами, переходами, версиями и историей прохождений?`)) return;
 
   await api(path(), "DELETE");
   location.assign("/");
@@ -329,13 +332,7 @@ byId("copy-dialogue").onclick = run(async () => {
 byId("export-dialogue").onclick = run(async () => {
   const id = state.dialogue.id;
   const data = await api(`${path()}/export`);
-  const file = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(file);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `dialogue-${id}.json`;
-  link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 0);
+  downloadJson(data, `dialogue-${id}.json`);
 });
 byId("new-character").onsubmit = run(async event => {
   const form = event.currentTarget;

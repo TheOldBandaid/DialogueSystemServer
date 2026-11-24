@@ -135,6 +135,16 @@ passwordForm.onsubmit = run(async () => {
 
 export const dialogueUrl = id => `/dialogues/${id}`;
 
+export function downloadJson(data, name) {
+  const file = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(file);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = name;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
 export async function initializeWorkspace(loadPage) {
   async function showWorkspace(profile) {
     showAccountManagement(profile);

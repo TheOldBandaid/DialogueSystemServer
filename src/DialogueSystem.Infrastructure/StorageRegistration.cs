@@ -20,6 +20,7 @@ public static class StorageRegistration
             .AddScoped<IAccountStore, SqliteAccounts>()
             .AddScoped<IPasswordService, PasswordService>()
             .AddScoped<IDialogueCatalog, SqliteDialogueCatalog>()
+            .AddScoped<IDialogueRevisions, SqliteRevisions>()
             .AddScoped<ICharacterCatalog, SqliteCharacterCatalog>()
             .AddScoped<ILineStore, SqliteLines>()
             .AddScoped<IPreviewStore, SqlitePreviews>();

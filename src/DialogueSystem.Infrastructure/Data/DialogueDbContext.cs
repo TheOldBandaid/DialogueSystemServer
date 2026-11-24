@@ -7,6 +7,7 @@ public sealed class DialogueDbContext(DbContextOptions<DialogueDbContext> option
 {
     public DbSet<Character> Characters => Set<Character>();
     public DbSet<Dialogue> Dialogues => Set<Dialogue>();
+    public DbSet<DialogueRevision> DialogueRevisions => Set<DialogueRevision>();
     public DbSet<DialogueLine> Lines => Set<DialogueLine>();
     public DbSet<DialogueChoice> Choices => Set<DialogueChoice>();
     public DbSet<DialoguePreview> Previews => Set<DialoguePreview>();
@@ -15,6 +16,9 @@ public sealed class DialogueDbContext(DbContextOptions<DialogueDbContext> option
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<Dialogue>().Property(dialogue => dialogue.Id).ValueGeneratedOnAdd();
+        modelBuilder.Entity<DialogueRevision>().HasOne<Dialogue>().WithMany()
+            .HasForeignKey(revision => revision.DialogueId).OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<DialogueRevision>().HasIndex(revision => new { revision.DialogueId, revision.Id });
         modelBuilder.Entity<Account>().HasIndex(account => account.Login).IsUnique();
         modelBuilder.Entity<DialoguePreview>()
             .HasIndex(preview => new { preview.UserId, preview.DialogueId, preview.StartedAtUnixMilliseconds });
