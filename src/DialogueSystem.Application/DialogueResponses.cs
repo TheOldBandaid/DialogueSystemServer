@@ -20,6 +20,7 @@ public sealed record LineContext(
 public sealed record DialogueValidation(IReadOnlyList<string> Errors, IReadOnlyList<int> UnreachableLineIds)
 {
     public IReadOnlyList<DialogueValidationIssue> Issues { get; init; } = [];
+    public bool Complete { get; init; } = true;
 }
 
 public sealed record DialogueValidationIssue(string Code, string Message, int? LineId = null);

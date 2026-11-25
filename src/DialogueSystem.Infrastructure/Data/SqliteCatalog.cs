@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DialogueSystem.Infrastructure.Data;
 
-internal sealed class SqliteDialogueCatalog(DialogueDbContext db) : IDialogueCatalog
+internal sealed class SqliteDialogueCatalog(DialogueDbContext db, GraphSnapshots cache) : IDialogueCatalog
 {
     public async Task<IReadOnlyList<DialogueSummary>> ListAsync(CancellationToken ct) =>
         await db.Dialogues.OrderBy(dialogue => dialogue.Title)
@@ -106,17 +106,21 @@ internal sealed class SqliteDialogueCatalog(DialogueDbContext db) : IDialogueCat
         return new(context.Line, incoming, outgoing);
     }
 
-    public Task<IReadOnlyList<LineSummary>?> BranchesAsync(int id, CancellationToken ct) =>
-        ReadGraphAsync<IReadOnlyList<LineSummary>>(id, graph => graph.GetStoryBranches(), ct);
+    public async Task<IReadOnlyList<LineSummary>?> BranchesAsync(int id, CancellationToken ct)
+    {
+        var lines = await db.Lines.Where(line => line.DialogueId == id && line.IsStoryBranch)
+            .OrderBy(line => line.Id).Select(line => new LineSummary(line.Id, line.Speaker.Name, line.Text,
+                line.IsEnding, line.IsStoryBranch, line.SpeakerId)).ToListAsync(ct);
+        return lines.Count == 0 && !await db.Dialogues.AnyAsync(dialogue => dialogue.Id == id, ct) ? null : lines;
+    }
 
     public Task<DialogueValidation?> ValidateAsync(int id, CancellationToken ct) =>
-        ReadGraphAsync(id, graph => graph.Validate(), ct);
+        ReadGraphAsync(id, graph => graph.Validate(ct: ct), ct);
 
     private async Task<T?> ReadGraphAsync<T>(int id, Func<DialogueGraph, T> select, CancellationToken ct)
         where T : class
     {
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        var graph = await DialogueGraphLoader.LoadAsync(db, id, ct);
+        var graph = await DialogueGraphLoader.LoadAsync(db, cache, id, ct);
         return graph is null ? null : select(graph);
     }
 }

@@ -15,6 +15,8 @@ public interface ILineStore
 {
     Task<IStorageTransaction> BeginAsync(CancellationToken ct);
     Task<bool> DialogueExistsAsync(int id, CancellationToken ct);
+    Task<int> CountLinesAsync(int id, CancellationToken ct);
+    Task<int> CountChoicesAsync(int id, CancellationToken ct);
     Task<Dialogue?> FindDialogueAsync(int id, CancellationToken ct);
     Task<List<LineSummary>> ListAsync(int id, CancellationToken ct);
     Task<DialogueLine?> FindLineAsync(int id, int lineId, CancellationToken ct);
@@ -43,6 +45,8 @@ public sealed class LineEditor(ILineStore store)
         await using var transaction = await store.BeginAsync(ct);
         if (!await store.DialogueExistsAsync(id, ct))
             return new(EditStatus.NotFound);
+        if (await store.CountLinesAsync(id, ct) >= DialogueLimits.MaximumLines)
+            return new(EditStatus.Conflict, $"Допускается до {DialogueLimits.MaximumLines} реплик в диалоге.");
 
         var speaker = await store.FindCharacterAsync(input.SpeakerId, ct);
         if (speaker is null)
@@ -124,6 +128,8 @@ public sealed class LineEditor(ILineStore store)
         var source = await store.FindLineAsync(id, lineId, ct);
         if (source is null)
             return new(EditStatus.NotFound);
+        if (choiceId is null && await store.CountChoicesAsync(id, ct) >= DialogueLimits.MaximumChoices)
+            return new(EditStatus.Conflict, $"Допускается до {DialogueLimits.MaximumChoices} переходов в диалоге.");
 
         var choice = choiceId is int existingId
             ? await store.FindChoiceAsync(id, lineId, existingId, ct)

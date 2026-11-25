@@ -16,6 +16,7 @@ public static class StorageRegistration
             ForeignKeys = true
         };
         return services
+            .AddSingleton<GraphSnapshots>()
             .AddDbContext<DialogueDbContext>(options => options.UseSqlite(connection.ToString()))
             .AddScoped<IAccountStore, SqliteAccounts>()
             .AddScoped<IPasswordService, PasswordService>()

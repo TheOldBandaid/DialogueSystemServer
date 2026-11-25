@@ -44,6 +44,7 @@ public sealed class DialoguePreviewsController(PreviewService previews) : Contro
             Extensions = { ["minimumPlayerLevel"] = result.MinimumLevel }
         }),
         PreviewStatus.StaleStep => Conflict(new ProblemDetails { Detail = "Этот шаг предпросмотра уже изменился." }),
+        PreviewStatus.StaleGraph => Conflict(new ProblemDetails { Detail = "Диалог изменился во время запроса. Повторите действие." }),
         PreviewStatus.UnavailableChoice => BadRequest(new ProblemDetails
         {
             Detail = "Этот ответ недоступен в текущей реплике."

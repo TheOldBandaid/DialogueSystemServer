@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DialogueSystem.Infrastructure.Data;
 
-internal sealed class SqlitePreviews(DialogueDbContext db) : IPreviewStore
+internal sealed class SqlitePreviews(DialogueDbContext db, GraphSnapshots cache) : IPreviewStore
 {
     public async Task<IReadOnlyList<PreviewSessionSummary>> ListAsync(int dialogueId, int userId, CancellationToken ct) =>
         await Owned(dialogueId, userId)
@@ -27,7 +27,14 @@ internal sealed class SqlitePreviews(DialogueDbContext db) : IPreviewStore
         Owned(dialogueId, userId).SingleOrDefaultAsync(preview => preview.Id == previewId, ct);
 
     public Task<DialogueGraph?> LoadGraphAsync(int dialogueId, CancellationToken ct) =>
-        DialogueGraphLoader.LoadAsync(db, dialogueId, ct);
+        DialogueGraphLoader.LoadAsync(db, cache, dialogueId, ct);
+
+    public Task<bool> GraphIsCurrentAsync(int dialogueId, long revision, CancellationToken ct) =>
+        db.Dialogues.AnyAsync(dialogue => dialogue.Id == dialogueId && dialogue.Revision == revision, ct);
+
+    public Task<int?> CurrentStepAsync(int dialogueId, int userId, Guid previewId, CancellationToken ct) =>
+        Owned(dialogueId, userId).Where(preview => preview.Id == previewId)
+            .Select(preview => (int?)preview.Step).SingleOrDefaultAsync(ct);
 
     public async Task<IStorageTransaction> BeginAsync(CancellationToken ct) =>
         new SqliteTransaction(await db.Database.BeginTransactionAsync(ct));

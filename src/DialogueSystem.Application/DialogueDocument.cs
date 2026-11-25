@@ -18,6 +18,12 @@ public sealed record DialogueDocument(
             yield break;
         }
 
+        if (Lines.Count > DialogueLimits.MaximumLines || Choices.Count > DialogueLimits.MaximumChoices)
+        {
+            yield return new($"Допускается до {DialogueLimits.MaximumLines} реплик и {DialogueLimits.MaximumChoices} переходов.");
+            yield break;
+        }
+
         var linesById = new Dictionary<int, DialogueDocumentLine>();
         foreach (var line in Lines)
         {

@@ -70,6 +70,9 @@ namespace DialogueSystem.Infrastructure.Data.Migrations
                     b.Property<int?>("MinimumPlayerLevel")
                         .HasColumnType("INTEGER");
 
+                    b.Property<long>("Revision")
+                        .HasColumnType("INTEGER");
+
                     b.Property<int?>("StartLineId")
                         .HasColumnType("INTEGER");
 

@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DialogueSystem.Infrastructure.Data;
 
-internal sealed class SqliteRevisions(DialogueDbContext db) : IDialogueRevisions
+internal sealed class SqliteRevisions(DialogueDbContext db, GraphSnapshots cache) : IDialogueRevisions
 {
     private const int PageSize = 20;
 
@@ -30,7 +30,7 @@ internal sealed class SqliteRevisions(DialogueDbContext db) : IDialogueRevisions
     public async Task<DialogueRevisionSummary?> CreateAsync(int dialogueId, string label, string author, CancellationToken ct)
     {
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        var graph = await DialogueGraphLoader.LoadAsync(db, dialogueId, ct);
+        var graph = await DialogueGraphLoader.LoadAsync(db, cache, dialogueId, ct);
         if (graph is null)
             return null;
 

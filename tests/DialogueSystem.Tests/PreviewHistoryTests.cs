@@ -95,11 +95,19 @@ public sealed class PreviewHistoryTests
         await using (var db = new DialogueDbContext(options))
         {
             await db.Database.MigrateAsync("20261122123604_AddMinimumPlayerLevel");
-            dialogue.Lines.AddRange([start, end]);
-            db.Dialogues.Add(dialogue);
-            await db.SaveChangesAsync();
+            // Insert using the historical schema, independently of the current EF model.
+            dialogue.Id = 1;
+            speaker.Id = 1;
+            start.Id = 1;
+            end.Id = 2;
+            await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO Dialogues (Id, Title) VALUES ({dialogue.Id}, {dialogue.Title})");
+            await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO Characters (Id, Name) VALUES ({speaker.Id}, {speaker.Name})");
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"INSERT INTO Lines (Id, DialogueId, SpeakerId, Text, IsEnding, IsStoryBranch) VALUES ({start.Id}, {dialogue.Id}, {speaker.Id}, {start.Text}, {false}, {false})");
+            await db.Database.ExecuteSqlInterpolatedAsync(
+                $"INSERT INTO Lines (Id, DialogueId, SpeakerId, Text, IsEnding, IsStoryBranch) VALUES ({end.Id}, {dialogue.Id}, {speaker.Id}, {end.Text}, {true}, {false})");
             dialogue.StartLineId = start.Id;
-            await db.SaveChangesAsync();
+            await db.Database.ExecuteSqlInterpolatedAsync($"UPDATE Dialogues SET StartLineId = {start.Id} WHERE Id = {dialogue.Id}");
             await db.Database.ExecuteSqlInterpolatedAsync(
                 $"INSERT INTO Choices (DialogueId, SourceLineId, TargetLineId, Text, Position) VALUES ({dialogue.Id}, {start.Id}, {end.Id}, {farewell}, {1})");
             await db.Database.ExecuteSqlInterpolatedAsync(

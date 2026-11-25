@@ -12,6 +12,12 @@ internal sealed class SqliteLines(DialogueDbContext db) : ILineStore
     public Task<bool> DialogueExistsAsync(int id, CancellationToken ct) =>
         db.Dialogues.AnyAsync(dialogue => dialogue.Id == id, ct);
 
+    public Task<int> CountLinesAsync(int id, CancellationToken ct) =>
+        db.Lines.CountAsync(line => line.DialogueId == id, ct);
+
+    public Task<int> CountChoicesAsync(int id, CancellationToken ct) =>
+        db.Choices.CountAsync(choice => choice.DialogueId == id, ct);
+
     public async Task<Dialogue?> FindDialogueAsync(int id, CancellationToken ct) =>
         await db.Dialogues.FindAsync([id], ct);
 
