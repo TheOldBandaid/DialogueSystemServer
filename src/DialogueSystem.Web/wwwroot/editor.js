@@ -120,7 +120,7 @@ function choiceForm(choice, position) {
     <div class="actions">
       <button>Сохранить вариант</button>
       <button type="button" name="target">Открыть цель</button>
-      <button type="button" name="remove"></button>
+      <button type="button" name="removeChoice"></button>
     </div>`;
   const fields = form.elements;
   fields.text.value = choice?.text ?? "";
@@ -131,8 +131,8 @@ function choiceForm(choice, position) {
   setOptions(fields.targetLineId, state.lines, shortLabel, choice?.line.id);
   fields.target.hidden = !choice;
   fields.target.onclick = run(() => selectLine(choice.line.id));
-  fields.remove.textContent = choice ? "Удалить вариант" : "Отмена";
-  fields.remove.onclick = run(async () => {
+  fields.removeChoice.textContent = choice ? "Удалить вариант" : "Отмена";
+  fields.removeChoice.onclick = run(async () => {
     if (choice) {
       await api(`${linePath()}/choices/${choice.id}`, "DELETE");
       hideValidation();
