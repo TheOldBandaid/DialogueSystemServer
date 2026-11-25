@@ -55,9 +55,8 @@ public sealed class DialogueDbContext(DbContextOptions<DialogueDbContext> option
             .HasIndex(choice => new { choice.DialogueId, choice.SourceLineId, choice.Position })
             .IsUnique();
         modelBuilder.Entity<DialoguePreview>()
-            .HasOne<DialogueLine>().WithMany()
-            .HasPrincipalKey(line => new { line.DialogueId, line.Id })
-            .HasForeignKey(preview => new { preview.DialogueId, preview.CurrentLineId })
+            .HasOne<Dialogue>().WithMany()
+            .HasForeignKey(preview => preview.DialogueId)
             .OnDelete(DeleteBehavior.Cascade);
     }
 }

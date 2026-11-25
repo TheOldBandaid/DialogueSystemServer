@@ -15,7 +15,7 @@ public interface IPreviewStore
     Task SaveAsync(CancellationToken ct);
 }
 
-public enum PreviewStatus { Ready, NotFound, InvalidGraph, LevelTooLow, StaleStep, UnavailableChoice, StaleGraph }
+public enum PreviewStatus { Ready, NotFound, InvalidGraph, LevelTooLow, StaleStep, UnavailableChoice, StaleGraph, RemovedLine }
 
 public sealed record PreviewResult(PreviewStatus Status, PreviewStep? Step = null,
     DialogueValidation? Validation = null, int? MinimumLevel = null);
@@ -72,6 +72,7 @@ public sealed class PreviewService(IPreviewStore store)
 
         var graph = await store.LoadGraphAsync(dialogueId, ct);
         if (graph is null) return new(PreviewStatus.NotFound);
+        if (!graph.ContainsLine(preview.CurrentLineId)) return new(PreviewStatus.RemovedLine);
         var validation = graph.Validate(preview, ct);
         if (validation.Errors.Count != 0)
             return new(PreviewStatus.InvalidGraph, Validation: validation);

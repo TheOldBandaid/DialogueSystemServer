@@ -7,6 +7,7 @@ public sealed class DialogueGraph(Dialogue dialogue, IReadOnlyList<DialogueChoic
     public int? StartLineId => dialogue.StartLineId;
     public int? MinimumPlayerLevel => dialogue.MinimumPlayerLevel;
     public long Revision => dialogue.Revision;
+    public bool ContainsLine(int lineId) => _lines.ContainsKey(lineId);
     private readonly object _validationLock = new();
     private readonly bool _hasConditions = choices.Any(choice => choice.RequiredState is not null);
     private DialogueValidation? _baseValidation;

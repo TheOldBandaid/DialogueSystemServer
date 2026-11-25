@@ -13,6 +13,47 @@ public sealed class PreviewHistoryTests
     private const string Dialogues = "/api/dialogues";
     private readonly string editorPassword = Guid.NewGuid().ToString("N");
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task KeepsHistoryWhenTheCurrentLineIsDeleted(bool completed)
+    {
+        using var data = new DialogueTestData();
+        string route;
+        string historyRoute;
+        PreviewHistory saved;
+        await using (var app = data.Start(settings: [new("DialogueSystem:EditorPassword", editorPassword)]))
+        using (var editor = new DialogueApiClient(app))
+        {
+            await editor.Login("editor", editorPassword);
+            var document = new DialogueDocument(1, "История удалённой реплики", 1,
+                [new(1, "Хранитель", "Начало", false, false), new(2, "Хранитель", "Выбранная реплика", completed, false),
+                    new(3, "Хранитель", "Конец", true, false)],
+                completed ? [new(1, 2, "Продолжить", 1)] : [new(1, 2, "Продолжить", 1), new(2, 3, "Завершить", 1)]);
+            var dialogue = await editor.Read<DialogueSummary>(HttpMethod.Post, Dialogues + "/import", Created, document);
+            route = $"{Dialogues}/{dialogue.Id}";
+            var first = await editor.Read<PreviewStep>(HttpMethod.Post, route + "/previews");
+            var current = await editor.Read<PreviewStep>(HttpMethod.Post, $"{route}/previews/{first.PreviewId}/choices",
+                payload: new SelectChoice(first.Choices[0].Id, 0));
+            historyRoute = $"{route}/previews/{first.PreviewId}/history";
+            saved = await editor.Get<PreviewHistory>(historyRoute);
+            await editor.Expect(NoContent, HttpMethod.Delete, $"{route}/lines/{first.Line.Id}/choices/{first.Choices[0].Id}");
+            await editor.Expect(NoContent, HttpMethod.Delete, $"{route}/lines/{current.Line.Id}");
+            Assert.Equal(saved.Steps.ToArray(), (await editor.Get<PreviewHistory>(historyRoute)).Steps.ToArray());
+            Assert.Single(await editor.Get<PreviewSessionSummary[]>(route + "/previews"));
+            await editor.Expect(Conflict, HttpMethod.Post, $"{route}/previews/{first.PreviewId}/choices",
+                new SelectChoice(first.Choices[0].Id, current.Step));
+        }
+        await using (var app = data.Start())
+        using (var editor = new DialogueApiClient(app))
+        {
+            await editor.Login("editor", editorPassword);
+            Assert.Equal(saved.Steps.ToArray(), (await editor.Get<PreviewHistory>(historyRoute)).Steps.ToArray());
+            await editor.Expect(NoContent, HttpMethod.Delete, route);
+            await editor.Expect(NotFound, HttpMethod.Get, historyRoute);
+        }
+    }
+
     [Fact]
     public async Task KeepsTextAndChoiceSnapshotsAfterEditingAndRestart()
     {

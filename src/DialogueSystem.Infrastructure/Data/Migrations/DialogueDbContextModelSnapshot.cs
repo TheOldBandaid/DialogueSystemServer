@@ -187,7 +187,7 @@ namespace DialogueSystem.Infrastructure.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("DialogueId", "CurrentLineId");
+                    b.HasIndex("DialogueId");
 
                     b.HasIndex("UserId", "DialogueId", "StartedAtUnixMilliseconds");
 
@@ -309,16 +309,15 @@ namespace DialogueSystem.Infrastructure.Data.Migrations
 
             modelBuilder.Entity("DialogueSystem.Domain.DialoguePreview", b =>
                 {
-                    b.HasOne("DialogueSystem.Domain.Account", null)
+                    b.HasOne("DialogueSystem.Domain.Dialogue", null)
                         .WithMany()
-                        .HasForeignKey("UserId")
+                        .HasForeignKey("DialogueId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("DialogueSystem.Domain.DialogueLine", null)
+                    b.HasOne("DialogueSystem.Domain.Account", null)
                         .WithMany()
-                        .HasForeignKey("DialogueId", "CurrentLineId")
-                        .HasPrincipalKey("DialogueId", "Id")
+                        .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

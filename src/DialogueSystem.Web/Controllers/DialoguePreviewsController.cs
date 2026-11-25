@@ -45,6 +45,10 @@ public sealed class DialoguePreviewsController(PreviewService previews) : Contro
         }),
         PreviewStatus.StaleStep => Conflict(new ProblemDetails { Detail = "Этот шаг предпросмотра уже изменился." }),
         PreviewStatus.StaleGraph => Conflict(new ProblemDetails { Detail = "Диалог изменился во время запроса. Повторите действие." }),
+        PreviewStatus.RemovedLine => Conflict(new ProblemDetails
+        {
+            Detail = "Текущая реплика удалена. Начните новое прохождение. Сохранённая история остаётся доступной."
+        }),
         PreviewStatus.UnavailableChoice => BadRequest(new ProblemDetails
         {
             Detail = "Этот ответ недоступен в текущей реплике."
