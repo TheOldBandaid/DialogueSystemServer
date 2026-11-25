@@ -22,10 +22,10 @@ public sealed class DialogueGraph(Dialogue dialogue, IReadOnlyList<DialogueChoic
         _lines.Values.Where(line => line.IsStoryBranch).OrderBy(line => line.Id).Select(Summarize).ToArray();
 
     public DialogueDocument ToDocument() => new(
-        1, dialogue.Title, dialogue.StartLineId,
+        2, dialogue.Title, dialogue.StartLineId,
         _lines.Values.OrderBy(line => line.Id)
             .Select(line => new DialogueDocumentLine(
-                line.Id, line.Speaker.Name, line.Text, line.IsEnding, line.IsStoryBranch)).ToArray(),
+                line.Id, line.Speaker.Name, line.Text, line.IsEnding, line.IsStoryBranch, line.Speaker.Key)).ToArray(),
         choices.OrderBy(choice => choice.SourceLineId).ThenBy(choice => choice.Position)
             .Select(choice => new DialogueDocumentChoice(
                 choice.SourceLineId, choice.TargetLineId, choice.Text, choice.Position,

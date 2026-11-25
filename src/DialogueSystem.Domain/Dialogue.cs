@@ -3,6 +3,7 @@ namespace DialogueSystem.Domain;
 public sealed class Character
 {
     public int Id { get; set; }
+    public string Key { get; set; } = Guid.NewGuid().ToString("N");
     public required string Name { get; set; }
 }
 

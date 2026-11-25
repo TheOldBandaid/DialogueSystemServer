@@ -18,17 +18,25 @@ internal static class DialogueImporter
     internal static async Task<DialogueSummary> SaveWithinTransactionAsync(
         DialogueDbContext db, DialogueDocument document, CancellationToken cancellationToken)
     {
-        var names = document.Lines.Select(line => line.Speaker.Trim()).Distinct(StringComparer.Ordinal).ToArray();
-        var existing = await db.Characters.Where(character => names.Contains(character.Name))
-            .OrderBy(character => character.Id).ToListAsync(cancellationToken);
-        var speakers = existing.GroupBy(character => character.Name, StringComparer.Ordinal)
-            .ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
-        foreach (var name in names)
+        string SpeakerKey(DialogueDocumentLine line) => document.Version == 2 ? line.SpeakerKey! : line.Speaker.Trim();
+        var requested = document.Lines.GroupBy(SpeakerKey, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First().Speaker.Trim(), StringComparer.Ordinal);
+        var keys = requested.Keys.ToArray();
+        var existing = document.Version == 2
+            ? await db.Characters.Where(character => keys.Contains(character.Key)).ToListAsync(cancellationToken)
+            : await db.Characters.Where(character => keys.Contains(character.Name)).OrderBy(character => character.Id)
+                .ToListAsync(cancellationToken);
+        var speakers = existing.GroupBy(character => document.Version == 2 ? character.Key : character.Name,
+                StringComparer.Ordinal).ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+        foreach (var (key, name) in requested)
         {
-            if (!speakers.ContainsKey(name))
+            if (speakers.TryGetValue(key, out var character) && character.Name == name) continue;
+            // A renamed character must not change the name captured by an older revision.
+            speakers[key] = new Character
             {
-                speakers.Add(name, new Character { Name = name });
-            }
+                Name = name,
+                Key = document.Version == 2 && character is null ? key : Guid.NewGuid().ToString("N")
+            };
         }
 
         var dialogue = new Dialogue
@@ -38,7 +46,7 @@ internal static class DialogueImporter
         };
         var lines = document.Lines.ToDictionary(line => line.Id, line => new DialogueLine
         {
-            Speaker = speakers[line.Speaker.Trim()],
+            Speaker = speakers[SpeakerKey(line)],
             Text = line.Text.Trim(),
             IsEnding = line.IsEnding,
             IsStoryBranch = line.IsStoryBranch

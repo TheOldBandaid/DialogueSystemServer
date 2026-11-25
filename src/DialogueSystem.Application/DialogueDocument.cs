@@ -4,7 +4,7 @@ using DialogueSystem.Domain;
 namespace DialogueSystem.Application;
 
 public sealed record DialogueDocument(
-    [Range(1, 1)] int Version,
+    [Range(1, 2)] int Version,
     [Required, StringLength(160)] string Title,
     [Range(1, int.MaxValue)] int? StartLineId,
     [Required] IReadOnlyList<DialogueDocumentLine> Lines,
@@ -25,6 +25,7 @@ public sealed record DialogueDocument(
         }
 
         var linesById = new Dictionary<int, DialogueDocumentLine>();
+        var speakerNames = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var line in Lines)
         {
             if (line is null || !linesById.TryAdd(line.Id, line))
@@ -36,6 +37,15 @@ public sealed record DialogueDocument(
             if (line.IsEnding && line.IsStoryBranch)
             {
                 yield return new($"Концовка {line.Id} не может быть сюжетной развилкой.", [nameof(Lines)]);
+            }
+
+            if (Version == 2)
+            {
+                if (string.IsNullOrEmpty(line.SpeakerKey))
+                    yield return new("В документе версии 2 у каждого говорящего должен быть ключ.", [nameof(Lines)]);
+                else if (speakerNames.TryGetValue(line.SpeakerKey, out var name) && name != line.Speaker.Trim())
+                    yield return new("Один ключ персонажа не может обозначать разные имена.", [nameof(Lines)]);
+                else speakerNames[line.SpeakerKey] = line.Speaker.Trim();
             }
         }
 
@@ -72,7 +82,8 @@ public sealed record DialogueDocumentLine(
     [Required, StringLength(120)] string Speaker,
     [Required, StringLength(4000)] string Text,
     bool IsEnding,
-    bool IsStoryBranch);
+    bool IsStoryBranch,
+    [RegularExpression("[a-f0-9]{32}")] string? SpeakerKey = null);
 
 public sealed record DialogueDocumentChoice(
     [Range(1, int.MaxValue)] int SourceLineId,

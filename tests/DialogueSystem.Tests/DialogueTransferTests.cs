@@ -27,7 +27,7 @@ public sealed class DialogueTransferTests
         await guest.Expect(Unauthorized, HttpMethod.Get, exportPath);
         await editor.Expect(NotFound, HttpMethod.Get, $"{Dialogues}/0/export");
         var document = await editor.Get<DialogueDocument>(exportPath);
-        Assert.Equal(1, document.Version);
+        Assert.Equal(2, document.Version);
         await guest.Expect(Unauthorized, HttpMethod.Post, Import, document);
         await editor.Expect(BadRequest, HttpMethod.Post, Import, document, includeToken: false);
         Assert.Equal(before, await editor.Get<DialogueSummary[]>(Dialogues));

@@ -115,7 +115,7 @@ public sealed class CharacterCatalogTests
         Assert.Equal(5, scoped.UpdatedLineCount);
         var edited = await editor.Get<DialogueDocument>(archiveRoute + "/export");
         Assert.Equal(original.StartLineId, edited.StartLineId);
-        Assert.Equal(original.Lines.Select(item => item with { Speaker = terra.Name }), edited.Lines);
+        Assert.Equal(original.Lines.Select(item => item with { Speaker = terra.Name, SpeakerKey = terra.Key }), edited.Lines);
         Assert.Equal(original.Choices.ToArray(), edited.Choices.ToArray());
         Assert.Equal(marta.Id, (await editor.Get<LineContext>(secondContext)).Line.SpeakerId);
         Assert.Equal(0, (await editor.Read<ReassignedLines>(HttpMethod.Post, route, payload: input)).UpdatedLineCount);
