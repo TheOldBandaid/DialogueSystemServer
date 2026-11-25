@@ -150,7 +150,8 @@ function choiceForm(choice, position) {
       targetLineId: Number(fields.targetLineId.value),
       position: Number(fields.position.value),
       requiredState: fields.requiredState.value.trim() || null,
-      nextState: fields.nextState.value.trim() || null
+      nextState: fields.nextState.value.trim() || null,
+      version: choice?.version
     });
     hideValidation();
     await selectLine(state.line.id);
@@ -349,7 +350,8 @@ lineForm.onsubmit = run(async () => {
     speakerId: Number(fields.speakerId.value),
     text: fields.text.value,
     isEnding: fields.isEnding.checked,
-    isStoryBranch: fields.isStoryBranch.checked
+    isStoryBranch: fields.isStoryBranch.checked,
+    version: state.line?.version
   });
   await loadDialogue(state.dialogue.id, saved?.id ?? state.line.id);
 });

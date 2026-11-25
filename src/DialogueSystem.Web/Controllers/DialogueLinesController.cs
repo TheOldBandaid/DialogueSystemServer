@@ -30,7 +30,7 @@ public sealed class DialogueLinesController(LineEditor editor) : ControllerBase
 
     [HttpPut("lines/{lineId:int}")]
     public async Task<IActionResult> Update(int id, int lineId, LineInput input, CancellationToken ct) =>
-        EditResponse(await editor.UpdateAsync(id, lineId, input.ToChange(), ct));
+        input.Version is null ? MissingVersion() : EditResponse(await editor.UpdateAsync(id, lineId, input.ToChange(), ct));
 
     [HttpPut("start")]
     public async Task<IActionResult> SetStart(int id, StartInput input, CancellationToken ct) =>
@@ -51,7 +51,7 @@ public sealed class DialogueLinesController(LineEditor editor) : ControllerBase
 
     [HttpPut("lines/{lineId:int}/choices/{choiceId:int}")]
     public async Task<IActionResult> UpdateChoice(int id, int lineId, int choiceId, ChoiceInput input, CancellationToken ct) =>
-        EditResponse(await editor.SaveChoiceAsync(id, lineId, choiceId, input.ToChange(), ct));
+        input.Version is null ? MissingVersion() : EditResponse(await editor.SaveChoiceAsync(id, lineId, choiceId, input.ToChange(), ct));
 
     [HttpDelete("lines/{lineId:int}/choices/{choiceId:int}")]
     public async Task<IActionResult> DeleteChoice(int id, int lineId, int choiceId, CancellationToken ct) =>
@@ -66,10 +66,14 @@ public sealed class DialogueLinesController(LineEditor editor) : ControllerBase
         _ => throw new InvalidOperationException()
     };
 
+    private ObjectResult MissingVersion() => StatusCode(StatusCodes.Status428PreconditionRequired,
+        new ProblemDetails { Detail = "Сначала получите текущую версию реплики и передайте поле version при сохранении." });
+
     public sealed record LineInput([Range(1, int.MaxValue)] int SpeakerId,
-        [Required, StringLength(4000)] string Text, bool IsEnding, bool IsStoryBranch)
+        [Required, StringLength(4000)] string Text, bool IsEnding, bool IsStoryBranch,
+        [StringLength(64, MinimumLength = 64)] string? Version = null)
     {
-        internal LineChange ToChange() => new(SpeakerId, Text, IsEnding, IsStoryBranch);
+        internal LineChange ToChange() => new(SpeakerId, Text, IsEnding, IsStoryBranch, Version);
     }
 
     public sealed record StartInput(int? LineId);
@@ -77,8 +81,9 @@ public sealed class DialogueLinesController(LineEditor editor) : ControllerBase
     public sealed record ChoiceInput([Range(1, int.MaxValue)] int TargetLineId,
         [Required, StringLength(500)] string Text, [Range(1, int.MaxValue)] int Position,
         [StringLength(DialogueChoice.MaximumStoryStateLength)] string? RequiredState = null,
-        [StringLength(DialogueChoice.MaximumStoryStateLength)] string? NextState = null)
+        [StringLength(DialogueChoice.MaximumStoryStateLength)] string? NextState = null,
+        [StringLength(64, MinimumLength = 64)] string? Version = null)
     {
-        internal ChoiceChange ToChange() => new(TargetLineId, Text, Position, RequiredState, NextState);
+        internal ChoiceChange ToChange() => new(TargetLineId, Text, Position, RequiredState, NextState, Version);
     }
 }

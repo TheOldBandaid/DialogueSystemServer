@@ -2,9 +2,9 @@ using DialogueSystem.Domain;
 
 namespace DialogueSystem.Application;
 
-public sealed record LineChange(int SpeakerId, string Text, bool IsEnding, bool IsStoryBranch);
+public sealed record LineChange(int SpeakerId, string Text, bool IsEnding, bool IsStoryBranch, string? Version = null);
 public sealed record ChoiceChange(
-    int TargetLineId, string Text, int Position, string? RequiredState, string? NextState);
+    int TargetLineId, string Text, int Position, string? RequiredState, string? NextState, string? Version = null);
 
 public enum EditStatus { Saved, NotFound, Invalid, Conflict }
 
@@ -72,6 +72,8 @@ public sealed class LineEditor(ILineStore store)
         var line = await store.FindLineAsync(id, lineId, ct);
         if (line is null)
             return new(EditStatus.NotFound);
+        if (input.Version != EditVersions.Line(line.SpeakerId, line.Text, line.IsEnding, line.IsStoryBranch))
+            return new(EditStatus.Conflict, "Реплика уже изменена в другой вкладке. Обновите её перед сохранением.");
         if (await store.FindCharacterAsync(input.SpeakerId, ct) is null)
             return new(EditStatus.Invalid, "Говорящий персонаж не найден.");
         if (input.IsEnding && input.IsStoryBranch)
@@ -136,6 +138,9 @@ public sealed class LineEditor(ILineStore store)
             : new DialogueChoice { DialogueId = id, SourceLineId = lineId, Text = input.Text.Trim() };
         if (choice is null)
             return new(EditStatus.NotFound);
+        if (choiceId is not null && input.Version != EditVersions.Choice(
+                choice.TargetLineId, choice.Text, choice.Position, choice.RequiredState, choice.NextState))
+            return new(EditStatus.Conflict, "Вариант ответа уже изменён в другой вкладке. Обновите реплику перед сохранением.");
         if (source.IsEnding)
             return new(EditStatus.Conflict, "У концовки не может быть исходящих ответов.");
         if (!await store.LineExistsAsync(id, input.TargetLineId, ct))

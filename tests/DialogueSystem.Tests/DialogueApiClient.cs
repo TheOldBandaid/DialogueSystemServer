@@ -1,5 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace DialogueSystem.Tests;
@@ -35,12 +37,29 @@ internal sealed class DialogueApiClient(WebApplicationFactory<Program> app) : ID
     }
 
     public async Task<HttpResponseMessage> Send(
-        HttpMethod method, string path, object? payload = null, bool includeToken = true)
+        HttpMethod method, string path, object? payload = null, bool includeToken = true, bool includeVersion = true)
     {
         using var request = new HttpRequestMessage(method, path);
         if (payload is not null)
         {
-            request.Content = JsonContent.Create(payload);
+            var body = JsonSerializer.SerializeToNode(payload, JsonSerializerOptions.Web);
+            var parts = path.Trim('/').Split('/');
+            if (includeVersion && method == HttpMethod.Put && body is JsonObject input &&
+                !input.ContainsKey("version") && parts.Length is 5 or 7 && parts[0] == "api" &&
+                parts[1] == "dialogues" && parts[3] == "lines")
+            {
+                using var contextReply = await client.GetAsync("/" + string.Join('/', parts.Take(5)) + "/context");
+                var version = new string('0', 64);
+                if (contextReply.IsSuccessStatusCode)
+                {
+                    var context = (await contextReply.Content.ReadFromJsonAsync<JsonObject>())!;
+                    version = parts.Length == 5 ? context["line"]!["version"]!.GetValue<string>() :
+                        context["outgoing"]!.AsArray().FirstOrDefault(choice =>
+                            choice!["id"]!.GetValue<int>().ToString() == parts[6])?["version"]?.GetValue<string>() ?? version;
+                }
+                input["version"] = version;
+            }
+            request.Content = JsonContent.Create(body);
         }
 
         if (includeToken && csrfToken is not null && method != HttpMethod.Get)

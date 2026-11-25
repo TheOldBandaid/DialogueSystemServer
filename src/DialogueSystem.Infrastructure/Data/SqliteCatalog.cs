@@ -83,7 +83,7 @@ internal sealed class SqliteDialogueCatalog(DialogueDbContext db, GraphSnapshots
                 Link = new ChoiceLink(choice.Id, choice.Text, choice.Position,
                     new LineSummary(neighbor.Id, neighbor.Speaker.Name, neighbor.Text,
                         neighbor.IsEnding, neighbor.IsStoryBranch, neighbor.SpeakerId),
-                    choice.RequiredState, choice.NextState)
+                    choice.RequiredState, choice.NextState, choice.TargetLineId)
             };
 
         var context = await db.Lines.AsSingleQuery()

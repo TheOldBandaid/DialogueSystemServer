@@ -7,10 +7,17 @@ public sealed record DialogueSummary(int Id, string Title, int? StartLineId, int
 public sealed record DialogueOverview(int Id, string Title, bool HasStart, int? MinimumPlayerLevel,
     int LineCount, int BranchCount, int EndingCount);
 
-public sealed record LineSummary(int Id, string Speaker, string Text, bool IsEnding, bool IsStoryBranch, int SpeakerId);
+public sealed record LineSummary(int Id, string Speaker, string Text, bool IsEnding, bool IsStoryBranch, int SpeakerId)
+{
+    public string Version => EditVersions.Line(SpeakerId, Text, IsEnding, IsStoryBranch);
+}
 
 public sealed record ChoiceLink(
-    int Id, string Text, int Position, LineSummary Line, string? RequiredState = null, string? NextState = null);
+    int Id, string Text, int Position, LineSummary Line, string? RequiredState = null, string? NextState = null,
+    int TargetLineId = 0)
+{
+    public string Version => EditVersions.Choice(TargetLineId, Text, Position, RequiredState, NextState);
+}
 
 public sealed record LineContext(
     LineSummary Line,
