@@ -3,6 +3,7 @@ using DialogueSystem.Infrastructure;
 using DialogueSystem.Web;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.DataProtection;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 var dataDirectory = Directory.CreateDirectory(
@@ -24,6 +25,13 @@ builder.Services.AddAuthorization();
 builder.Services.AddAntiforgery(options => options.HeaderName = "X-CSRF-TOKEN");
 builder.Services.AddControllersWithViews();
 builder.Services.AddOpenApi();
+builder.Services.AddSingleton<LoginProtection>();
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddPolicy(LoginProtection.Policy, context => RateLimitPartition.GetSlidingWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "local", _ => LoginProtection.Window(30)));
+    options.OnRejected = (context, ct) => new ValueTask(LoginProtection.RejectAsync(context.HttpContext, context.Lease, ct));
+});
 
 var app = builder.Build();
 await using (var scope = app.Services.CreateAsyncScope())
@@ -41,6 +49,7 @@ await using (var scope = app.Services.CreateAsyncScope())
 app.UseStaticFiles();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 app.MapControllers();
 if (app.Environment.IsDevelopment())
 {

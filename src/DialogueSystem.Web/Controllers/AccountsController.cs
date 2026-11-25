@@ -4,12 +4,13 @@ using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace DialogueSystem.Web.Controllers;
 
 [ApiController]
 [Route("api/accounts")]
-public sealed class AccountsController(AccountService accounts) : ControllerBase
+public sealed class AccountsController(AccountService accounts, LoginProtection protection) : ControllerBase
 {
     [HttpGet("csrf")]
     public IActionResult Csrf(IAntiforgery antiforgery)
@@ -19,9 +20,16 @@ public sealed class AccountsController(AccountService accounts) : ControllerBase
     }
 
     [HttpPost("login")]
+    [EnableRateLimiting(LoginProtection.Policy)]
     [ValidateAntiForgeryToken]
     public async Task<ActionResult<AccountSummary>> Login(LoginRequest request, CancellationToken cancellationToken)
     {
+        using var lease = protection.Acquire(request.Login);
+        if (!lease.IsAcquired)
+        {
+            await LoginProtection.RejectAsync(HttpContext, lease, cancellationToken);
+            return new EmptyResult();
+        }
         var session = await accounts.AuthenticateAsync(request.Login, request.Password, cancellationToken);
         if (session is null)
             return Unauthorized();
