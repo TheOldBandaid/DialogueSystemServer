@@ -144,4 +144,69 @@ internal sealed class SqliteCharacterCatalog(DialogueDbContext db) : ICharacterC
             .ExecuteUpdateAsync(setters => setters.SetProperty(character => character.Name, normalized), ct);
         return updated != 0;
     }
+
+    public async Task<CharacterUsage?> UsageAsync(int id, CancellationToken ct)
+    {
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        var character = await FindAsync(id, ct);
+        if (character is null)
+            return null;
+
+        var counts = db.Lines.Where(line => line.SpeakerId == id).GroupBy(line => line.DialogueId)
+            .Select(group => new
+            {
+                DialogueId = group.Key,
+                FirstLineId = group.Min(line => line.Id),
+                LineCount = group.Count()
+            });
+        var dialogues = await (
+            from count in counts
+            join dialogue in db.Dialogues on count.DialogueId equals dialogue.Id
+            orderby dialogue.Title, dialogue.Id
+            select new CharacterDialogueUsage(dialogue.Id, dialogue.Title, count.FirstLineId, count.LineCount))
+            .ToListAsync(ct);
+
+        return new(character.Id, character.Name, dialogues.Sum(dialogue => dialogue.LineCount), dialogues);
+    }
+
+    public async Task<CharacterRemoval> DeleteAsync(int id, CancellationToken ct)
+    {
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        var selected = db.Characters.Where(character => character.Id == id);
+        if (await selected.Where(character => !db.Lines.Any(line => line.SpeakerId == character.Id))
+                .ExecuteDeleteAsync(ct) == 0)
+        {
+            return await selected.AnyAsync(ct) ? CharacterRemoval.InUse : CharacterRemoval.NotFound;
+        }
+
+        await transaction.CommitAsync(ct);
+        return CharacterRemoval.Removed;
+    }
+
+    public async Task<CharacterReassignment> ReassignAsync(
+        int sourceId, int targetId, int? dialogueId, CancellationToken ct)
+    {
+        if (sourceId == targetId)
+            return new(ReassignmentStatus.SameCharacter);
+
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        var characters = await db.Characters.Where(character => character.Id == sourceId || character.Id == targetId)
+            .Select(character => character.Id).ToListAsync(ct);
+        if (!characters.Contains(sourceId))
+            return new(ReassignmentStatus.SourceNotFound);
+        if (!characters.Contains(targetId))
+            return new(ReassignmentStatus.TargetNotFound);
+
+        var lines = db.Lines.Where(line => line.SpeakerId == sourceId);
+        if (dialogueId is int scope)
+        {
+            if (!await db.Dialogues.AnyAsync(dialogue => dialogue.Id == scope, ct))
+                return new(ReassignmentStatus.DialogueNotFound);
+            lines = lines.Where(line => line.DialogueId == scope);
+        }
+
+        var updated = await lines.ExecuteUpdateAsync(setters => setters.SetProperty(line => line.SpeakerId, targetId), ct);
+        await transaction.CommitAsync(ct);
+        return new(ReassignmentStatus.Reassigned, updated);
+    }
 }

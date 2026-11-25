@@ -24,4 +24,19 @@ public interface ICharacterCatalog
     Task<Character?> FindAsync(int id, CancellationToken ct);
     Task<Character> CreateAsync(string name, CancellationToken ct);
     Task<bool> RenameAsync(int id, string name, CancellationToken ct);
+    Task<CharacterUsage?> UsageAsync(int id, CancellationToken ct);
+    Task<CharacterRemoval> DeleteAsync(int id, CancellationToken ct);
+    Task<CharacterReassignment> ReassignAsync(int sourceId, int targetId, int? dialogueId, CancellationToken ct);
 }
+
+public sealed record CharacterUsage(int Id, string Name, int LineCount, IReadOnlyList<CharacterDialogueUsage> Dialogues);
+
+public sealed record CharacterDialogueUsage(int DialogueId, string Title, int FirstLineId, int LineCount);
+
+public enum CharacterRemoval { Removed, NotFound, InUse }
+
+public enum ReassignmentStatus { Reassigned, SameCharacter, SourceNotFound, TargetNotFound, DialogueNotFound }
+
+public sealed record CharacterReassignment(ReassignmentStatus Status, int UpdatedLineCount = 0);
+
+public sealed record ReassignedLines(int UpdatedLineCount);

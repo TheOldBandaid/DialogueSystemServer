@@ -13,4 +13,7 @@ public sealed class PagesController : Controller
 
     [HttpGet("/dialogues/{id:int:min(1)}")]
     public IActionResult Editor(int id) => View(model: id);
+
+    [HttpGet("/characters")]
+    public IActionResult Characters() => View();
 }

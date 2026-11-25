@@ -1,0 +1,38 @@
+@{
+    Layout = "_Layout";
+    ViewData["Title"] = "Персонажи";
+}
+
+<nav aria-label="Рабочая область">
+  <a href="/">Каталог диалогов</a>
+</nav>
+<section aria-label="Справочник персонажей">
+  <form id="create-character" class="actions">
+    <label>Имя нового персонажа <input name="name" maxlength="120" required></label>
+    <button>Создать персонажа</button>
+  </form>
+  <p id="characters-empty" hidden>В справочнике пока нет персонажей.</p>
+  <div id="character-details" hidden>
+    <label>Персонаж <select id="character-picker"></select></label>
+    <form id="rename-character" class="actions">
+      <label>Имя персонажа <input name="name" maxlength="120" required></label>
+      <button>Сохранить имя</button>
+      <button type="button" id="delete-character">Удалить персонажа</button>
+    </form>
+    <h2>Реплики персонажа</h2>
+    <p id="character-usage" role="status"></p>
+    <ul id="character-dialogues"></ul>
+    <details id="reassignment-panel" hidden>
+      <summary>Переназначение реплик</summary>
+      <form id="reassign-speaker" class="actions">
+        <label>Новый говорящий <select name="targetCharacterId" required></select></label>
+        <label>Где заменить <select name="dialogueId"></select></label>
+        <button>Переназначить реплики</button>
+      </form>
+    </details>
+  </div>
+</section>
+
+@section Scripts {
+    <script type="module" src="/characters.js"></script>
+}
