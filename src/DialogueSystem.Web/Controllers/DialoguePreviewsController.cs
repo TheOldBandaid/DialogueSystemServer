@@ -2,6 +2,7 @@ using DialogueSystem.Application;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
+using System.ComponentModel.DataAnnotations;
 
 namespace DialogueSystem.Web.Controllers;
 
@@ -15,10 +16,18 @@ public sealed class DialoguePreviewsController(PreviewService previews) : Contro
     public Task<IReadOnlyList<PreviewSessionSummary>> List(int id, CancellationToken cancellationToken) =>
         previews.ListAsync(id, SessionPrincipal.UserId(User), cancellationToken);
 
-    [HttpGet("{previewId:guid}/history")]
-    public async Task<ActionResult<PreviewHistory>> History(int id, Guid previewId, CancellationToken cancellationToken)
+    [HttpGet("page")]
+    public async Task<ActionResult<PreviewSessionPage>> Page(int id, Guid? before, CancellationToken cancellationToken)
     {
-        var history = await previews.HistoryAsync(id, SessionPrincipal.UserId(User), previewId, cancellationToken);
+        var page = await previews.ListPageAsync(id, SessionPrincipal.UserId(User), before, cancellationToken);
+        return page is null ? NotFound() : Ok(page);
+    }
+
+    [HttpGet("{previewId:guid}/history")]
+    public async Task<ActionResult<PreviewHistory>> History(int id, Guid previewId, CancellationToken cancellationToken,
+        [FromQuery, Range(-1, int.MaxValue)] int after = -1)
+    {
+        var history = await previews.HistoryAsync(id, SessionPrincipal.UserId(User), previewId, cancellationToken, after);
         return history is null ? NotFound() : Ok(history);
     }
 

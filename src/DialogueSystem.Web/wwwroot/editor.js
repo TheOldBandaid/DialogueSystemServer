@@ -1,6 +1,7 @@
 import { api, byId, dialogueUrl, downloadJson, initializeWorkspace, run } from "./workspace.js";
 import { createDialogueMap } from "./dialogue-map.js";
 import { initializeRevisions } from "./dialogue-revisions.js";
+import { createDraftGuard } from "./draft-guard.js";
 
 const editorContent = byId("editor-content");
 const renameDialogueForm = byId("rename-dialogue");
@@ -11,6 +12,9 @@ const previewHistory = byId("preview-history");
 const previewSessions = byId("preview-sessions");
 const historyDate = new Intl.DateTimeFormat("ru-RU", { dateStyle: "short", timeStyle: "medium" });
 const state = { dialogue: null, lines: [], characters: [], line: null };
+const drafts = createDraftGuard(editorContent);
+let sessionCursor;
+let historyCursor;
 
 function setOptions(select, records, label, current) {
   select.replaceChildren(...records.map(item => new Option(label(item), item.id)));
@@ -66,11 +70,12 @@ async function loadDialogue(id, preferredLineId) {
   listLinks("lines", lines, "Реплик пока нет.");
   listLinks("branches", branches, "Сюжетные развилки не отмечены.");
   const preferred = lines.find(line => line.id === preferredLineId);
-  await selectLine(preferred?.id ?? branches[0]?.id ?? dialogue.startLineId ?? lines[0]?.id);
+  await selectLine(preferred?.id ?? branches[0]?.id ?? dialogue.startLineId ?? lines[0]?.id, true);
   await dialogueMap.refresh();
 }
 
-async function selectLine(id) {
+async function selectLine(id, discardConfirmed = false) {
+  if (!discardConfirmed && !drafts.confirmDiscard()) return;
   const context = id == null ? null : await api(`${path()}/lines/${id}/context`);
   state.line = context?.line ?? null;
   const line = state.line;
@@ -89,7 +94,11 @@ async function selectLine(id) {
   byId("clear-start").hidden = !isStart;
   byId("delete-line").hidden = !line;
   byId("context").hidden = !context;
-  if (!context) return;
+  if (!context) {
+    byId("choices").replaceChildren();
+    drafts.reset(lineForm);
+    return;
+  }
 
   byId("incoming").replaceChildren(...context.incoming.map(choice =>
     linkToLine(choice.line.id, `${choice.text} ← ${shortLabel(choice.line)}`)));
@@ -100,9 +109,11 @@ async function selectLine(id) {
     const position = Math.max(0, ...context.outgoing.map(choice => choice.position));
     const form = choiceForm(null, position < 2147483647 ? position + 1 : 1);
     byId("choices").append(form);
+    drafts.watch(form);
     byId("new-choice").hidden = true;
     form.elements.text.focus();
   });
+  drafts.reset(lineForm, ...byId("choices").querySelectorAll("form"));
 }
 
 function choiceForm(choice, position) {
@@ -134,9 +145,10 @@ function choiceForm(choice, position) {
   fields.removeChoice.textContent = choice ? "Удалить вариант" : "Отмена";
   fields.removeChoice.onclick = run(async () => {
     if (choice) {
+      if (!drafts.confirmDiscard(form)) return;
       await api(`${linePath()}/choices/${choice.id}`, "DELETE");
       hideValidation();
-      await selectLine(state.line.id);
+      await selectLine(state.line.id, true);
       await dialogueMap.refresh();
     } else {
       form.remove();
@@ -144,6 +156,7 @@ function choiceForm(choice, position) {
     }
   });
   form.onsubmit = run(async () => {
+    if (!drafts.confirmDiscard(form)) return;
     const base = `${linePath()}/choices`;
     await api(choice ? `${base}/${choice.id}` : base, choice ? "PUT" : "POST", {
       text: fields.text.value,
@@ -154,7 +167,7 @@ function choiceForm(choice, position) {
       version: choice?.version
     });
     hideValidation();
-    await selectLine(state.line.id);
+    await selectLine(state.line.id, true);
     await dialogueMap.refresh();
   });
   return form;
@@ -220,6 +233,10 @@ function renderValidation(report) {
 }
 
 function resetPreviewHistory() {
+  sessionCursor = null;
+  historyCursor = null;
+  byId("preview-sessions-more").hidden = true;
+  byId("preview-history-more").hidden = true;
   previewHistory.open = false;
   previewSessions.replaceChildren();
   previewSessions.disabled = true;
@@ -228,15 +245,20 @@ function resetPreviewHistory() {
 }
 
 async function loadPreviewHistory(preferredId = previewSessions.value) {
-  const sessions = await api(`${path()}/previews`);
-  previewSessions.replaceChildren(...sessions.map(session => {
-    const timestamp = session.startedAtUnixMilliseconds;
-    const date = timestamp == null ? `Сеанс ${session.previewId.slice(0, 8)}` : historyDate.format(timestamp);
-    return new Option(`${date} · переходов: ${session.step}`, session.previewId);
-  }));
+  const page = await api(`${path()}/previews/page`);
+  const sessions = page.items;
+  sessionCursor = page.nextBeforeId;
+  byId("preview-sessions-more").hidden = sessionCursor == null;
+  previewSessions.replaceChildren(...sessions.map(previewSessionOption));
   previewSessions.disabled = sessions.length === 0;
   if (sessions.some(session => session.previewId === preferredId)) previewSessions.value = preferredId;
   await showPreviewHistory(previewSessions.value);
+}
+
+function previewSessionOption(session) {
+  const timestamp = session.startedAtUnixMilliseconds;
+  const date = timestamp == null ? `Сеанс ${session.previewId.slice(0, 8)}` : historyDate.format(timestamp);
+  return new Option(`${date} · переходов: ${session.step}`, session.previewId);
 }
 
 async function showPreviewHistory(previewId) {
@@ -244,6 +266,8 @@ async function showPreviewHistory(previewId) {
   const message = byId("preview-history-message");
   list.replaceChildren();
   message.textContent = "";
+  historyCursor = null;
+  byId("preview-history-more").hidden = true;
   if (!previewId) {
     message.textContent = "Для этого диалога пока нет прохождений.";
     return;
@@ -258,13 +282,17 @@ async function showPreviewHistory(previewId) {
   const firstStep = history.steps[0].step;
   list.start = firstStep;
   if (firstStep > 0) message.textContent = `В этом сеансе история записана с шага ${firstStep}.`;
-  list.replaceChildren(...history.steps.map(step => {
-    const item = document.createElement("li");
-    const choice = document.createElement("strong");
-    choice.textContent = step.choiceText ?? "Начало диалога";
-    item.append(choice, renderPreviewLine(step, step.storyState));
-    return item;
-  }));
+  list.replaceChildren(...history.steps.map(previewHistoryRow));
+  historyCursor = history.nextAfterStep;
+  byId("preview-history-more").hidden = historyCursor == null;
+}
+
+function previewHistoryRow(step) {
+  const item = document.createElement("li");
+  const choice = document.createElement("strong");
+  choice.textContent = step.choiceText ?? "Начало диалога";
+  item.append(choice, renderPreviewLine(step, step.storyState));
+  return item;
 }
 
 async function requestPreview(route, body) {
@@ -312,6 +340,7 @@ function renderStep(step) {
 }
 
 renameDialogueForm.onsubmit = run(async () => {
+  if (!drafts.confirmDiscard()) return;
   await api(path(), "PUT", { title: renameDialogueForm.elements.title.value });
   await loadDialogue(state.dialogue.id, state.line?.id);
   byId("status").textContent = `Диалог переименован в «${state.dialogue.title}».`;
@@ -321,13 +350,16 @@ byId("delete-dialogue").onclick = run(async () => {
   if (!window.confirm(`Удалить диалог «${title}» вместе с репликами, переходами, версиями и историей прохождений?`)) return;
 
   await api(path(), "DELETE");
+  drafts.reset();
   location.assign("/");
 });
 byId("copy-dialogue").onclick = run(async () => {
+  if (!drafts.confirmDiscard()) return;
   const data = await api(`${path()}/export`);
   const suffix = " (копия)";
   const title = data.title.length <= 160 - suffix.length ? data.title + suffix : "Копия диалога";
   const created = await api("/api/dialogues/import", "POST", { ...data, title });
+  drafts.reset();
   location.assign(dialogueUrl(created.id));
 });
 byId("export-dialogue").onclick = run(async () => {
@@ -345,6 +377,7 @@ byId("new-character").onsubmit = run(async event => {
 });
 byId("new-line").onclick = run(() => selectLine(null));
 lineForm.onsubmit = run(async () => {
+  if (!drafts.confirmDiscard(lineForm)) return;
   const fields = lineForm.elements;
   const saved = await api(state.line ? linePath() : `${path()}/lines`, state.line ? "PUT" : "POST", {
     speakerId: Number(fields.speakerId.value),
@@ -356,10 +389,12 @@ lineForm.onsubmit = run(async () => {
   await loadDialogue(state.dialogue.id, saved?.id ?? state.line.id);
 });
 byId("set-start").onclick = run(async () => {
+  if (!drafts.confirmDiscard()) return;
   await api(`${path()}/start`, "PUT", { lineId: state.line.id });
   await loadDialogue(state.dialogue.id, state.line.id);
 });
 byId("clear-start").onclick = run(async () => {
+  if (!drafts.confirmDiscard()) return;
   await api(`${path()}/start`, "PUT", { lineId: null });
   await loadDialogue(state.dialogue.id, state.line.id);
 });
@@ -387,6 +422,20 @@ previewHistory.ontoggle = () => {
 };
 byId("refresh-preview-history").onclick = refreshHistory;
 previewSessions.onchange = run(() => showPreviewHistory(previewSessions.value));
+byId("preview-sessions-more").onclick = run(async () => {
+  if (!sessionCursor) return;
+  const page = await api(`${path()}/previews/page?before=${sessionCursor}`);
+  previewSessions.append(...page.items.map(previewSessionOption));
+  sessionCursor = page.nextBeforeId;
+  byId("preview-sessions-more").hidden = sessionCursor == null;
+});
+byId("preview-history-more").onclick = run(async () => {
+  if (historyCursor == null || !previewSessions.value) return;
+  const page = await api(`${path()}/previews/${previewSessions.value}/history?after=${historyCursor}`);
+  byId("preview-history-steps").append(...page.steps.map(previewHistoryRow));
+  historyCursor = page.nextAfterStep;
+  byId("preview-history-more").hidden = historyCursor == null;
+});
 
 previewForm.onsubmit = run(async () => {
   byId("preview-step").replaceChildren();

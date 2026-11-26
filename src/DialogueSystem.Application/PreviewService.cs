@@ -5,7 +5,8 @@ namespace DialogueSystem.Application;
 public interface IPreviewStore
 {
     Task<IReadOnlyList<PreviewSessionSummary>> ListAsync(int dialogueId, int userId, CancellationToken ct);
-    Task<PreviewHistory?> HistoryAsync(int dialogueId, int userId, Guid previewId, CancellationToken ct);
+    Task<PreviewSessionPage?> ListPageAsync(int dialogueId, int userId, Guid? before, CancellationToken ct);
+    Task<PreviewHistory?> HistoryAsync(int dialogueId, int userId, Guid previewId, CancellationToken ct, int after = -1);
     Task<DialoguePreview?> FindAsync(int dialogueId, int userId, Guid previewId, CancellationToken ct);
     Task<DialogueGraph?> LoadGraphAsync(int dialogueId, CancellationToken ct);
     Task<bool> GraphIsCurrentAsync(int dialogueId, long revision, CancellationToken ct);
@@ -25,8 +26,11 @@ public sealed class PreviewService(IPreviewStore store)
     public Task<IReadOnlyList<PreviewSessionSummary>> ListAsync(int dialogueId, int userId, CancellationToken ct) =>
         store.ListAsync(dialogueId, userId, ct);
 
-    public Task<PreviewHistory?> HistoryAsync(int dialogueId, int userId, Guid previewId, CancellationToken ct) =>
-        store.HistoryAsync(dialogueId, userId, previewId, ct);
+    public Task<PreviewSessionPage?> ListPageAsync(int dialogueId, int userId, Guid? before, CancellationToken ct) =>
+        store.ListPageAsync(dialogueId, userId, before, ct);
+
+    public Task<PreviewHistory?> HistoryAsync(int dialogueId, int userId, Guid previewId, CancellationToken ct, int after = -1) =>
+        store.HistoryAsync(dialogueId, userId, previewId, ct, after);
 
     public async Task<PreviewResult> StartAsync(int dialogueId, int userId, int? playerLevel, CancellationToken ct)
     {

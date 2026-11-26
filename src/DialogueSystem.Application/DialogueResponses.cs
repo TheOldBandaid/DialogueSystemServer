@@ -43,11 +43,15 @@ public sealed record PreviewStep(
     string? StoryState = null);
 
 public sealed record PreviewSessionSummary(Guid PreviewId, int Step, long? StartedAtUnixMilliseconds);
+public sealed record PreviewSessionPage(IReadOnlyList<PreviewSessionSummary> Items, Guid? NextBeforeId);
 
 public sealed record PreviewHistoryStep(
     int Step, int LineId, string Speaker, string Text, bool IsEnding, string? ChoiceText, string? StoryState = null);
 
-public sealed record PreviewHistory(Guid PreviewId, int CurrentStep, IReadOnlyList<PreviewHistoryStep> Steps);
+public sealed record PreviewHistory(Guid PreviewId, int CurrentStep, IReadOnlyList<PreviewHistoryStep> Steps)
+{
+    public int? NextAfterStep { get; init; }
+}
 
 public sealed record PreviewInput([Range(1, int.MaxValue)] int? PlayerLevel);
 

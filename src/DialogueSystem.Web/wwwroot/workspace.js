@@ -127,6 +127,7 @@ newAccountForm.onsubmit = run(async () => {
 passwordForm.onsubmit = run(async () => {
   const { currentPassword, newPassword, confirmation } = Object.fromEntries(new FormData(passwordForm));
   if (newPassword !== confirmation) throw new Error("Новые пароли не совпадают.");
+  if (!document.dispatchEvent(new Event("workspace:beforeleave", { cancelable: true }))) return;
 
   await api("/api/accounts/me/password", "PUT", { currentPassword, newPassword });
   showLogin();
@@ -162,6 +163,7 @@ export async function initializeWorkspace(loadPage) {
     await showWorkspace(profile);
   });
   byId("logout").onclick = run(async () => {
+    if (!document.dispatchEvent(new Event("workspace:beforeleave", { cancelable: true }))) return;
     await api("/api/accounts/logout", "POST");
     showLogin();
   });

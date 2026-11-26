@@ -3,6 +3,7 @@
 
 [Bb]in/
 [Oo]bj/
+node_modules/
 [Aa]rtifacts/
 [Tt]est[Rr]esults/
 *.trx
