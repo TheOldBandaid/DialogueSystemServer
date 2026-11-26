@@ -103,7 +103,8 @@ async function selectLine(id, discardConfirmed = false) {
   byId("incoming").replaceChildren(...context.incoming.map(choice =>
     linkToLine(choice.line.id, `${choice.text} ← ${shortLabel(choice.line)}`)));
   byId("incoming").hidden = context.incoming.length === 0;
-  byId("choices").replaceChildren(...context.outgoing.map(choice => choiceForm(choice)));
+  byId("choices").replaceChildren(...context.outgoing.map((choice, index) =>
+    choiceForm(choice, undefined, index === 0, index === context.outgoing.length - 1)));
   byId("new-choice").hidden = line.isEnding;
   byId("new-choice").onclick = run(() => {
     const position = Math.max(0, ...context.outgoing.map(choice => choice.position));
@@ -116,7 +117,7 @@ async function selectLine(id, discardConfirmed = false) {
   drafts.reset(lineForm, ...byId("choices").querySelectorAll("form"));
 }
 
-function choiceForm(choice, position) {
+function choiceForm(choice, position, first = false, last = false) {
   const form = document.createElement("form");
   form.className = "choice";
   form.innerHTML = `
@@ -131,6 +132,8 @@ function choiceForm(choice, position) {
     <div class="actions">
       <button>Сохранить вариант</button>
       <button type="button" name="target">Открыть цель</button>
+      <button type="button" name="moveUp">Выше</button>
+      <button type="button" name="moveDown">Ниже</button>
       <button type="button" name="removeChoice"></button>
     </div>`;
   const fields = form.elements;
@@ -142,6 +145,17 @@ function choiceForm(choice, position) {
   setOptions(fields.targetLineId, state.lines, shortLabel, choice?.line.id);
   fields.target.hidden = !choice;
   fields.target.onclick = run(() => selectLine(choice.line.id));
+  for (const [button, direction, boundary] of [[fields.moveUp, -1, first], [fields.moveDown, 1, last]]) {
+    button.hidden = !choice;
+    button.disabled = boundary;
+    button.onclick = run(async () => {
+      if (!drafts.confirmDiscard()) return;
+      await api(`${linePath()}/choices/${choice.id}/move`, "POST", { direction, version: choice.version });
+      hideValidation();
+      await selectLine(state.line.id, true);
+      await dialogueMap.refresh();
+    });
+  }
   fields.removeChoice.textContent = choice ? "Удалить вариант" : "Отмена";
   fields.removeChoice.onclick = run(async () => {
     if (choice) {

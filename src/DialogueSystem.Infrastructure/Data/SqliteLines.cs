@@ -54,6 +54,21 @@ internal sealed class SqliteLines(DialogueDbContext db) : ILineStore
         db.Choices.SingleOrDefaultAsync(choice => choice.DialogueId == id &&
             choice.SourceLineId == lineId && choice.Id == choiceId, ct);
 
+    public Task<DialogueChoice?> NeighborChoiceAsync(int id, int lineId, int position, int direction, CancellationToken ct)
+    {
+        var choices = db.Choices.Where(choice => choice.DialogueId == id && choice.SourceLineId == lineId);
+        return direction < 0
+            ? choices.Where(choice => choice.Position < position).OrderByDescending(choice => choice.Position).FirstOrDefaultAsync(ct)
+            : choices.Where(choice => choice.Position > position).OrderBy(choice => choice.Position).FirstOrDefaultAsync(ct);
+    }
+
+    public Task SwapChoicesAsync(DialogueChoice first, DialogueChoice second, CancellationToken ct) =>
+        db.Database.ExecuteSqlInterpolatedAsync($"""
+            UPDATE Choices SET Position = 0 WHERE Id = {first.Id};
+            UPDATE Choices SET Position = {first.Position} WHERE Id = {second.Id};
+            UPDATE Choices SET Position = {second.Position} WHERE Id = {first.Id};
+            """, ct);
+
     public Task DeleteOutgoingAsync(int id, int lineId, CancellationToken ct) =>
         db.Choices.Where(choice => choice.DialogueId == id && choice.SourceLineId == lineId).ExecuteDeleteAsync(ct);
 

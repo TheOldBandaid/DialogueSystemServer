@@ -57,6 +57,13 @@ public sealed class DialogueLinesController(LineEditor editor) : ControllerBase
     public async Task<IActionResult> DeleteChoice(int id, int lineId, int choiceId, CancellationToken ct) =>
         await editor.DeleteChoiceAsync(id, lineId, choiceId, ct) ? NoContent() : NotFound();
 
+    [HttpPost("lines/{lineId:int}/choices/{choiceId:int}/move")]
+    public async Task<IActionResult> MoveChoice(int id, int lineId, int choiceId, MoveChoiceInput input, CancellationToken ct) =>
+        EditResponse(await editor.MoveChoiceAsync(id, lineId, choiceId, input.Direction, input.Version, ct));
+
+    public sealed record MoveChoiceInput([Range(-1, 1)] int Direction,
+        [Required, StringLength(64, MinimumLength = 64)] string Version);
+
     private ActionResult EditResponse(EditResult result) => result.Status switch
     {
         EditStatus.Saved => NoContent(),

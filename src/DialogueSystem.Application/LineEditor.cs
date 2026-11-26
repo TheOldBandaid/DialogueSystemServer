@@ -27,6 +27,8 @@ public interface ILineStore
     Task<bool> HasOutgoingAsync(int id, int lineId, CancellationToken ct);
     Task<bool> PositionTakenAsync(int id, int lineId, int position, int exceptChoice, CancellationToken ct);
     Task<DialogueChoice?> FindChoiceAsync(int id, int lineId, int choiceId, CancellationToken ct);
+    Task<DialogueChoice?> NeighborChoiceAsync(int id, int lineId, int position, int direction, CancellationToken ct);
+    Task SwapChoicesAsync(DialogueChoice first, DialogueChoice second, CancellationToken ct);
     Task DeleteOutgoingAsync(int id, int lineId, CancellationToken ct);
     Task<bool> DeleteChoiceAsync(int id, int lineId, int choiceId, CancellationToken ct);
     void AddLine(DialogueLine line);
@@ -123,6 +125,25 @@ public sealed class LineEditor(ILineStore store)
 
     public Task<bool> DeleteChoiceAsync(int id, int lineId, int choiceId, CancellationToken ct) =>
         store.DeleteChoiceAsync(id, lineId, choiceId, ct);
+
+    public async Task<EditResult> MoveChoiceAsync(int id, int lineId, int choiceId, int direction, string version, CancellationToken ct)
+    {
+        if (direction is not (-1 or 1)) return new(EditStatus.Invalid, "Направление должно быть -1 или 1.");
+        await using var transaction = await store.BeginAsync(ct);
+        var choice = await store.FindChoiceAsync(id, lineId, choiceId, ct);
+        if (choice is null) return new(EditStatus.NotFound);
+        if (version != EditVersions.Choice(choice.TargetLineId, choice.Text, choice.Position, choice.RequiredState, choice.NextState))
+            return new(EditStatus.Conflict, "Вариант ответа уже изменился. Обновите реплику перед перемещением.");
+        var neighbor = await store.NeighborChoiceAsync(id, lineId, choice.Position, direction, ct);
+        if (neighbor is not null)
+        {
+            if (await store.PositionTakenAsync(id, lineId, 0, choice.Id, ct))
+                return new(EditStatus.Conflict, "В диалоге есть вариант с недопустимой нулевой позицией.");
+            await store.SwapChoicesAsync(choice, neighbor, ct);
+        }
+        await transaction.CommitAsync(ct);
+        return new(EditStatus.Saved);
+    }
 
     public async Task<EditResult> SaveChoiceAsync(int id, int lineId, int? choiceId, ChoiceChange input, CancellationToken ct)
     {
