@@ -6,6 +6,7 @@ const newAccountForm = byId("new-account");
 const passwordForm = byId("change-password");
 const roleLabels = { Editor: "Редактор", Administrator: "Администратор" };
 let token = "";
+let pendingOperations = 0;
 
 export async function api(path, method = "GET", body) {
   const response = await fetch(path, {
@@ -30,6 +31,7 @@ export async function api(path, method = "GET", body) {
 export function run(operation) {
   return async event => {
     event?.preventDefault();
+    pendingOperations++;
     workspace.inert = true;
     login.inert = true;
     byId("logout").disabled = true;
@@ -40,9 +42,10 @@ export function run(operation) {
       if (error.status === 401) showLogin();
       byId("status").textContent = error.message;
     } finally {
-      workspace.inert = false;
-      login.inert = false;
-      byId("logout").disabled = false;
+      pendingOperations--;
+      workspace.inert = pendingOperations > 0;
+      login.inert = pendingOperations > 0;
+      byId("logout").disabled = pendingOperations > 0;
     }
   };
 }
