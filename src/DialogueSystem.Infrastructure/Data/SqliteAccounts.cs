@@ -22,6 +22,14 @@ internal sealed class SqliteAccounts(DialogueDbContext db) : IAccountStore
             .Select(account => new AccountSummary(account.Id, account.Login, account.Role))
             .ToListAsync(ct);
 
+    public async Task<InitialAccountsStatus> InitialStatusAsync(CancellationToken ct)
+    {
+        var accounts = await db.Accounts.Select(account => new { account.Login, account.Role }).ToListAsync(ct);
+        return new(accounts.Any(account => account.Login == "admin"),
+            accounts.Any(account => account.Login == "editor"),
+            accounts.Any(account => account.Role == AccountRoles.Administrator));
+    }
+
     public async Task<IStorageTransaction> BeginAsync(CancellationToken ct) =>
         new SqliteTransaction(await db.Database.BeginTransactionAsync(ct));
 

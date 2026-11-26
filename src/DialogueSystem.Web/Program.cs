@@ -11,6 +11,7 @@ var dataDirectory = Directory.CreateDirectory(
     Path.Combine(builder.Environment.ContentRootPath, "App_Data"));
 
 builder.Services.AddDialogueStorage(dataDirectory.FullName);
+builder.Services.AddSingleton(_ => new DataDirectoryLease(dataDirectory.FullName));
 builder.Services.AddScoped<AccountService>();
 builder.Services.AddScoped<LineEditor>();
 builder.Services.AddScoped<PreviewService>();
@@ -37,17 +38,25 @@ builder.Services.AddRateLimiter(options =>
     options.OnRejected = (context, ct) => new ValueTask(LoginProtection.RejectAsync(context.HttpContext, context.Lease, ct));
 });
 
-var app = builder.Build();
+await using var app = builder.Build();
+app.Services.GetRequiredService<DataDirectoryLease>();
 await using (var scope = app.Services.CreateAsyncScope())
 {
-    await scope.ServiceProvider.InitializeDialogueDatabaseAsync(app.Environment.IsDevelopment() &&
+    var maintenance = app.Configuration["maintenance"];
+    await scope.ServiceProvider.InitializeDialogueDatabaseAsync(maintenance is null && app.Environment.IsDevelopment() &&
         app.Configuration.GetValue("DialogueSystem:SeedDemo", true));
+
+    if (maintenance is not null)
+    {
+        Environment.ExitCode = await MaintenanceCommands.RunAsync(maintenance, scope.ServiceProvider, app.Configuration);
+        return;
+    }
 
     var accounts = scope.ServiceProvider.GetRequiredService<AccountService>();
     if (app.Configuration["DialogueSystem:AdminPassword"] is { Length: > 0 } adminPassword)
-        await accounts.CreateAsync("admin", adminPassword, AccountRoles.Administrator, CancellationToken.None);
+        await accounts.EnsureAsync("admin", adminPassword, AccountRoles.Administrator, CancellationToken.None);
     if (app.Configuration["DialogueSystem:EditorPassword"] is { Length: > 0 } editorPassword)
-        await accounts.CreateAsync("editor", editorPassword, AccountRoles.Editor, CancellationToken.None);
+        await accounts.EnsureAsync("editor", editorPassword, AccountRoles.Editor, CancellationToken.None);
 }
 
 if (!app.Environment.IsDevelopment())

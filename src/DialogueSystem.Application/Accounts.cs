@@ -18,6 +18,7 @@ public sealed record AccountSession(int Id, string Login, string Role, int Versi
 
 public enum RoleChange { Changed, NotFound, LastAdministrator }
 public enum PasswordChange { Changed, WrongPassword, SamePassword, StaleAccount }
+public sealed record InitialAccountsStatus(bool AdminExists, bool EditorExists, bool HasAdministrator);
 
 public interface IPasswordService
 {
@@ -31,6 +32,7 @@ public interface IAccountStore
     Task<Account?> FindByIdAsync(int id, CancellationToken ct);
     Task<AccountSession?> GetSessionAsync(int id, CancellationToken ct);
     Task<IReadOnlyList<AccountSummary>> ListAsync(CancellationToken ct);
+    Task<InitialAccountsStatus> InitialStatusAsync(CancellationToken ct);
     Task<IStorageTransaction> BeginAsync(CancellationToken ct);
     Task AddAsync(Account account, CancellationToken ct);
     Task<bool> HasOtherAdministratorAsync(int id, CancellationToken ct);
@@ -42,7 +44,7 @@ public sealed class AccountService(IAccountStore store, IPasswordService passwor
 {
     public async Task<AccountSession?> AuthenticateAsync(string login, string password, CancellationToken ct)
     {
-        var account = await store.FindByLoginAsync(NormalizeLogin(login), ct);
+        var account = await store.FindByLoginAsync(AccountRules.NormalizeLogin(login), ct);
         if (account is null || !passwords.Verify(account, password))
             return null;
 
@@ -53,9 +55,20 @@ public sealed class AccountService(IAccountStore store, IPasswordService passwor
 
     public Task<IReadOnlyList<AccountSummary>> ListAsync(CancellationToken ct) => store.ListAsync(ct);
 
+    public Task<InitialAccountsStatus> InitialStatusAsync(CancellationToken ct) => store.InitialStatusAsync(ct);
+
+    public async Task<bool> EnsureAsync(string login, string password, string role, CancellationToken ct)
+    {
+        if (await store.FindByLoginAsync(AccountRules.NormalizeLogin(login), ct) is not null)
+            return false;
+        return await CreateAsync(login, password, role, ct) is not null;
+    }
+
     public async Task<AccountSummary?> CreateAsync(string login, string password, string role, CancellationToken ct)
     {
-        var account = new Account { Login = NormalizeLogin(login), Role = role, PasswordHash = "" };
+        var normalized = AccountRules.NormalizeLogin(login);
+        AccountRules.Validate(normalized, password, role);
+        var account = new Account { Login = normalized, Role = role, PasswordHash = "" };
         account.PasswordHash = passwords.Hash(account, password);
 
         await using var transaction = await store.BeginAsync(ct);
@@ -69,6 +82,7 @@ public sealed class AccountService(IAccountStore store, IPasswordService passwor
 
     public async Task<RoleChange> ChangeRoleAsync(int id, string role, CancellationToken ct)
     {
+        AccountRules.ValidateRole(role);
         await using var transaction = await store.BeginAsync(ct);
         var account = await store.GetSessionAsync(id, ct);
         if (account is null)
@@ -86,6 +100,7 @@ public sealed class AccountService(IAccountStore store, IPasswordService passwor
     public async Task<PasswordChange> ChangePasswordAsync(
         int id, string currentPassword, string newPassword, CancellationToken ct)
     {
+        AccountRules.ValidatePassword(newPassword);
         var account = await store.FindByIdAsync(id, ct);
         if (account is null || !passwords.Verify(account, currentPassword))
             return PasswordChange.WrongPassword;
@@ -98,6 +113,4 @@ public sealed class AccountService(IAccountStore store, IPasswordService passwor
             ? PasswordChange.Changed
             : PasswordChange.StaleAccount;
     }
-
-    private static string NormalizeLogin(string login) => login.Trim().ToLowerInvariant();
 }
