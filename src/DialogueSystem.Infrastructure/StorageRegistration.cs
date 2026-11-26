@@ -31,6 +31,27 @@ public static class StorageRegistration
         this IServiceProvider services, bool includeExamples, CancellationToken cancellationToken = default)
     {
         var db = services.GetRequiredService<DialogueDbContext>();
+        var databasePath = db.Database.GetDbConnection().DataSource;
+        if (File.Exists(databasePath) && (await db.Database.GetPendingMigrationsAsync(cancellationToken)).Any())
+        {
+            var backups = Directory.CreateDirectory(Path.Combine(Path.GetDirectoryName(databasePath)!, "backups"));
+            var name = $"dialogues-{DateTime.UtcNow:yyyyMMdd-HHmmss}-{Guid.NewGuid():N}.db";
+            var destination = new SqliteConnectionStringBuilder
+            {
+                DataSource = Path.Combine(backups.FullName, name), Pooling = false
+            };
+            await db.Database.OpenConnectionAsync(cancellationToken);
+            try
+            {
+                await using var backup = new SqliteConnection(destination.ToString());
+                await backup.OpenAsync(cancellationToken);
+                ((SqliteConnection)db.Database.GetDbConnection()).BackupDatabase(backup);
+            }
+            finally
+            {
+                await db.Database.CloseConnectionAsync();
+            }
+        }
         await db.Database.MigrateAsync(cancellationToken);
         if (includeExamples)
             await DemoDialogue.SeedAsync(db, cancellationToken);

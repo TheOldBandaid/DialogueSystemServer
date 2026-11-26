@@ -60,5 +60,14 @@ public sealed class CharacterIdentityTests
         var keys = await db.Characters.Select(character => character.Key).ToArrayAsync();
         Assert.Equal(2, keys.Distinct().Count());
         Assert.All(keys, key => Assert.True(Guid.TryParseExact(key, "N", out _)));
+        var backupPath = Assert.Single(Directory.GetFiles(Path.Combine(Path.GetDirectoryName(data.DatabasePath)!, "backups"), "*.db"));
+        await using var backup = new SqliteConnection(new SqliteConnectionStringBuilder
+            { DataSource = backupPath, Mode = SqliteOpenMode.ReadOnly, Pooling = false }.ToString());
+        await backup.OpenAsync();
+        using var command = backup.CreateCommand();
+        command.CommandText = "SELECT count(*) FROM Characters;";
+        Assert.Equal(2L, await command.ExecuteScalarAsync());
+        command.CommandText = "SELECT count(*) FROM pragma_table_info('Characters') WHERE name = 'Key';";
+        Assert.Equal(0L, await command.ExecuteScalarAsync());
     }
 }
