@@ -19,12 +19,16 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
 {
     options.Cookie.Name = "DialogueSystem.Session";
     options.Cookie.SameSite = SameSiteMode.Strict;
+    options.Cookie.SecurePolicy = builder.Environment.IsDevelopment() ? CookieSecurePolicy.SameAsRequest : CookieSecurePolicy.Always;
     options.Events.OnValidatePrincipal = SessionPrincipal.ValidateAsync;
 });
 builder.Services.AddAuthorization();
 builder.Services.AddAntiforgery(options => options.HeaderName = "X-CSRF-TOKEN");
 builder.Services.AddControllersWithViews();
 builder.Services.AddOpenApi();
+builder.Services.AddProblemDetails();
+builder.Services.AddHttpsRedirection(options => options.HttpsPort =
+    builder.Configuration.GetValue<int?>("HTTPS_PORT") ?? 443);
 builder.Services.AddSingleton<LoginProtection>();
 builder.Services.AddRateLimiter(options =>
 {
@@ -46,6 +50,12 @@ await using (var scope = app.Services.CreateAsyncScope())
         await accounts.CreateAsync("editor", editorPassword, AccountRoles.Editor, CancellationToken.None);
 }
 
+if (!app.Environment.IsDevelopment())
+{
+    app.UseExceptionHandler();
+    app.UseHsts();
+    app.UseHttpsRedirection();
+}
 app.UseStaticFiles();
 app.UseAuthentication();
 app.UseAuthorization();
