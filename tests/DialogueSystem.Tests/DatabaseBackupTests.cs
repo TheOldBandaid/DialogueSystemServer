@@ -89,6 +89,80 @@ public sealed class DatabaseBackupTests
     }
 
     [Fact]
+    public async Task RestoresAnOlderSchemaOnlyAfterUpgradingItsTemporaryCopy()
+    {
+        using var data = new DialogueTestData();
+        var directory = Path.GetDirectoryName(data.DatabasePath)!;
+        await using (var app = data.Start()) using (var client = app.CreateClient()) { }
+        var source = Path.Combine(directory, "older-schema.db");
+        const string initial = "20261120110136_InitialDialogueSchema";
+        var options = new DbContextOptionsBuilder<DialogueDbContext>().UseSqlite($"Data Source={source};Pooling=False").Options;
+        await using (var db = new DialogueDbContext(options))
+        {
+            await db.Database.MigrateAsync(initial);
+            await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO Dialogues (Title) VALUES ({"Из старой копии"})");
+        }
+        var originalFile = await File.ReadAllBytesAsync(source);
+        using (var lease = new DataDirectoryLease(directory))
+        using (var backups = new DatabaseBackups(directory)) await backups.RestoreAsync(source);
+        Assert.Equal(originalFile, await File.ReadAllBytesAsync(source));
+        await using (var unchanged = new DialogueDbContext(options))
+            Assert.Equal(new[] { initial }, await unchanged.Database.GetAppliedMigrationsAsync());
+        await using var restored = data.Start();
+        using var scope = restored.Services.CreateScope();
+        var current = scope.ServiceProvider.GetRequiredService<DialogueDbContext>();
+        Assert.Empty(await current.Database.GetPendingMigrationsAsync());
+        Assert.Equal("Из старой копии", (await current.Dialogues.SingleAsync()).Title);
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public async Task RejectsMatchingTableNamesWithAnEmptyOrFalseMigrationHistory(int claimedSchema)
+    {
+        using var data = new DialogueTestData();
+        await using var app = data.Start();
+        var directory = Path.GetDirectoryName(data.DatabasePath)!;
+        var source = Path.Combine(directory, "incorrect-schema.db");
+        using var scope = app.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<DialogueDbContext>();
+        var titles = await db.Dialogues.OrderBy(item => item.Id).Select(item => item.Title).ToArrayAsync();
+        var epoch = app.Services.GetRequiredService<SessionEpoch>().Value;
+        await using (var connection = new SqliteConnection($"Data Source={source};Pooling=False"))
+        {
+            await connection.OpenAsync();
+            using var command = connection.CreateCommand();
+            command.CommandText = """
+                CREATE TABLE Dialogues (Id INTEGER PRIMARY KEY);
+                CREATE TABLE Characters (Id INTEGER PRIMARY KEY);
+                CREATE TABLE Lines (Id INTEGER PRIMARY KEY);
+                CREATE TABLE Choices (Id INTEGER PRIMARY KEY);
+                CREATE TABLE __EFMigrationsHistory (MigrationId TEXT NOT NULL PRIMARY KEY, ProductVersion TEXT NOT NULL);
+                """;
+            await command.ExecuteNonQueryAsync();
+            if (claimedSchema != 0)
+            {
+                command.CommandText = "INSERT INTO __EFMigrationsHistory VALUES ($id, '10.0.12');";
+                var parameter = command.Parameters.Add("$id", SqliteType.Text);
+                var migrations = db.Database.GetMigrations();
+                foreach (var migration in claimedSchema == 1 ? migrations.Take(1) : migrations)
+                {
+                    parameter.Value = migration;
+                    await command.ExecuteNonQueryAsync();
+                }
+            }
+        }
+        if (claimedSchema != 1)
+            await Assert.ThrowsAsync<InvalidDataException>(() => DatabaseBackups.ValidateAsync(source));
+        await Assert.ThrowsAsync<InvalidDataException>(() => app.Services.GetRequiredService<DatabaseBackups>().RestoreAsync(source));
+        Assert.Equal(titles, await db.Dialogues.OrderBy(item => item.Id).Select(item => item.Title).ToArrayAsync());
+        Assert.Equal(epoch, File.ReadAllText(Path.Combine(directory, "session-epoch")));
+        Assert.Empty(Directory.GetDirectories(directory, "before-restore-*", SearchOption.AllDirectories));
+        Assert.Empty(Directory.GetFiles(directory, "*.partial*"));
+    }
+
+    [Fact]
     public async Task DailyBackupIsIdempotentAndAutomaticRetentionKeepsManualCopies()
     {
         using var data = new DialogueTestData();

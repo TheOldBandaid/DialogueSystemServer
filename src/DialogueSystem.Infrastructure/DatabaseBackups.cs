@@ -73,9 +73,18 @@ public sealed class DatabaseBackups(string directory, TimeProvider? clock = null
             throw new InvalidDataException("Файл не является резервной копией базы диалогов.");
         var options = new DbContextOptionsBuilder<DialogueDbContext>().UseSqlite(connection).Options;
         await using var db = new DialogueDbContext(options);
-        var applied = await db.Database.GetAppliedMigrationsAsync(ct);
-        if (applied.Except(db.Database.GetMigrations(), StringComparer.Ordinal).Any())
-            throw new InvalidDataException("Копия создана другой версией схемы. Используйте соответствующую версию сервера.");
+        var known = db.Database.GetMigrations().ToArray();
+        var applied = (await db.Database.GetAppliedMigrationsAsync(ct)).ToArray();
+        if (applied.Length == 0 || !applied.SequenceEqual(known.Take(applied.Length), StringComparer.Ordinal))
+            throw new InvalidDataException("В копии отсутствует совместимая последовательность миграций приложения.");
+        if (applied.Length == known.Length)
+        {
+            try { await CheckSchemaAsync(db, ct); }
+            catch (SqliteException error)
+            {
+                throw new InvalidDataException("Схема резервной копии не соответствует миграциям приложения.", error);
+            }
+        }
     }
 
     public async Task<DatabaseRestore> RestoreAsync(string source, CancellationToken ct = default)
@@ -89,6 +98,7 @@ public sealed class DatabaseBackups(string directory, TimeProvider? clock = null
         {
             await CopyDatabaseAsync(source, staging, ct);
             await ValidateAsync(staging, requireApplication: true, ct);
+            await PrepareRestoreAsync(staging, ct);
             var preserved = Directory.CreateDirectory(System.IO.Path.Combine(BackupDirectory, $"before-restore-{Guid.NewGuid():N}"));
             foreach (var suffix in new[] { "", "-wal", "-shm", "-journal" })
                 if (File.Exists(DatabasePath + suffix))
@@ -102,6 +112,33 @@ public sealed class DatabaseBackups(string directory, TimeProvider? clock = null
             try { DeleteFileSet(staging); }
             finally { gate.Release(); }
         }
+    }
+
+    private static async Task PrepareRestoreAsync(string path, CancellationToken ct)
+    {
+        var connection = new SqliteConnectionStringBuilder { DataSource = path, Pooling = false, ForeignKeys = true };
+        var options = new DbContextOptionsBuilder<DialogueDbContext>().UseSqlite(connection.ToString()).Options;
+        try
+        {
+            await using (var db = new DialogueDbContext(options)) await db.Database.MigrateAsync(ct);
+            await ValidateAsync(path, requireApplication: true, ct);
+        }
+        catch (SqliteException error)
+        {
+            throw new InvalidDataException("Резервную копию нельзя подготовить к запуску. Рабочая база не изменена.", error);
+        }
+    }
+
+    private static async Task CheckSchemaAsync(DialogueDbContext db, CancellationToken ct)
+    {
+        await db.Accounts.AsNoTracking().Take(1).ToListAsync(ct);
+        await db.Characters.AsNoTracking().Take(1).ToListAsync(ct);
+        await db.Dialogues.AsNoTracking().Take(1).ToListAsync(ct);
+        await db.Lines.AsNoTracking().Take(1).ToListAsync(ct);
+        await db.Choices.AsNoTracking().Take(1).ToListAsync(ct);
+        await db.Previews.AsNoTracking().Take(1).ToListAsync(ct);
+        await db.DialogueRevisions.AsNoTracking().Take(1).ToListAsync(ct);
+        await db.Set<DialogueSystem.Domain.PreviewHistoryEntry>().AsNoTracking().Take(1).ToListAsync(ct);
     }
 
     private void Prune(BackupKind kind, int keep)
