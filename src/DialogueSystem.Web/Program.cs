@@ -50,7 +50,14 @@ builder.Services.AddRateLimiter(options =>
 });
 
 await using var app = builder.Build();
-var dataLease = app.Services.GetRequiredService<DataDirectoryLease>();
+DataDirectoryLease dataLease;
+try { dataLease = app.Services.GetRequiredService<DataDirectoryLease>(); }
+catch (IOException error)
+{
+    Console.Error.WriteLine(error.Message);
+    Environment.ExitCode = 1;
+    return;
+}
 app.Lifetime.ApplicationStopped.Register(dataLease.Dispose);
 await using (var scope = app.Services.CreateAsyncScope())
 {
