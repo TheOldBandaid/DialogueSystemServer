@@ -66,6 +66,9 @@ namespace DialogueSystem.Infrastructure.Data.Migrations
                     b.Property<string>("OriginKey")
                         .HasColumnType("TEXT");
 
+                    b.Property<long>("Revision")
+                        .HasColumnType("INTEGER");
+
                     b.HasKey("Id");
 
                     b.HasIndex("Key")
@@ -80,6 +83,9 @@ namespace DialogueSystem.Infrastructure.Data.Migrations
                 {
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<long>("ActivityRevision")
                         .HasColumnType("INTEGER");
 
                     b.Property<int?>("MinimumPlayerLevel")

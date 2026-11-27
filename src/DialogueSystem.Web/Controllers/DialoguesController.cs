@@ -21,6 +21,11 @@ public sealed class DialoguesController(IDialogueCatalog catalog) : ControllerBa
     public Task<IReadOnlyList<DialogueOverview>> Overview(CancellationToken cancellationToken) =>
         catalog.OverviewAsync(cancellationToken);
 
+    [HttpGet("page")]
+    public Task<CatalogPage<DialogueOverview>> Page([FromQuery, StringLength(CatalogLimits.SearchLength)] string? q,
+        [FromQuery] bool? hasStart, [FromQuery, Range(1, int.MaxValue)] int? before, CancellationToken ct) =>
+        catalog.PageAsync(q, hasStart, before, ct);
+
     [HttpGet("{id:int}")]
     public async Task<ActionResult<DialogueSummary>> Get(int id, CancellationToken cancellationToken)
     {
@@ -37,21 +42,34 @@ public sealed class DialoguesController(IDialogueCatalog catalog) : ControllerBa
 
     [HttpPut("{id:int}")]
     public async Task<IActionResult> Update(int id, DialogueInput input, CancellationToken cancellationToken) =>
-        await catalog.RenameAsync(id, input.Title, cancellationToken) ? NoContent() : NotFound();
+        input.Version is null ? VersionPreconditions.Missing() :
+            VersionPreconditions.Result(await catalog.RenameAsync(id, input.Title, input.Version, cancellationToken));
 
     [HttpDelete("{id:int}")]
-    public async Task<IActionResult> Delete(int id, CancellationToken cancellationToken) =>
-        await catalog.DeleteAsync(id, cancellationToken) ? NoContent() : NotFound();
+    public async Task<IActionResult> Delete(int id, [FromHeader(Name = "If-Match")] string? version, CancellationToken cancellationToken)
+    {
+        var error = VersionPreconditions.Header(version, out var expected);
+        return error ?? VersionPreconditions.Result(await catalog.DeleteAsync(id, expected, cancellationToken));
+    }
 
     [HttpPut("{id:int}/minimum-level")]
     public async Task<IActionResult> SetMinimumLevel(int id, MinimumLevelInput input, CancellationToken cancellationToken) =>
-        await catalog.SetMinimumLevelAsync(id, input.MinimumPlayerLevel, cancellationToken) ? NoContent() : NotFound();
+        input.Version is null ? VersionPreconditions.Missing() :
+            VersionPreconditions.Result(await catalog.SetMinimumLevelAsync(id, input.MinimumPlayerLevel, input.Version, cancellationToken));
 
     [HttpGet("{id:int}/export")]
     public async Task<ActionResult<DialogueDocument>> Export(int id, CancellationToken cancellationToken)
     {
         var document = await catalog.ExportAsync(id, cancellationToken);
         return document is null ? NotFound() : Ok(document);
+    }
+
+    [HttpGet("{id:int}/map")]
+    public async Task<ActionResult<DialogueMapSnapshot>> Map(int id, CancellationToken ct)
+    {
+        var map = await catalog.MapAsync(id, ct);
+        if (map is null) return NotFound();
+        return map.Complete ? Ok(map) : UnprocessableEntity(new ProblemDetails { Detail = "Диалог превышает допустимый размер карты." });
     }
 
     [HttpPost("import")]
@@ -62,10 +80,28 @@ public sealed class DialoguesController(IDialogueCatalog catalog) : ControllerBa
     }
 
     [HttpGet("{id:int}/lines/{lineId:int}/context")]
-    public async Task<ActionResult<LineContext>> Context(int id, int lineId, CancellationToken cancellationToken)
+    public async Task<ActionResult<LineContext>> Context(int id, int lineId, CancellationToken cancellationToken,
+        [FromQuery, Range(1, int.MaxValue)] int? outgoingAfter = null,
+        [FromQuery, Range(1, int.MaxValue)] int? incomingAfterLine = null,
+        [FromQuery, Range(1, int.MaxValue)] int? incomingAfterPosition = null,
+        [FromQuery, StringLength(64, MinimumLength = 64)] string? version = null)
     {
-        var context = await catalog.ContextAsync(id, lineId, cancellationToken);
+        if (incomingAfterLine.HasValue != incomingAfterPosition.HasValue)
+            return BadRequest(new ProblemDetails { Detail = "Передайте оба поля входящего курсора." });
+        if ((outgoingAfter.HasValue || incomingAfterLine.HasValue) && version is null) return VersionPreconditions.Missing();
+        var context = await catalog.ContextAsync(id, lineId, cancellationToken, outgoingAfter, incomingAfterLine, incomingAfterPosition);
+        if (context is not null && version is not null && context.Dialogue!.Version != version)
+            return Conflict(new ProblemDetails { Detail = "Связи диалога изменились. Обновите реплику перед загрузкой следующей страницы." });
         return context is null ? NotFound() : Ok(context);
+    }
+
+    [HttpGet("{id:int}/lines/{lineId:int}")]
+    public async Task<ActionResult<LineSummary>> GetLine(int id, int lineId, CancellationToken ct)
+    {
+        var context = await catalog.ContextAsync(id, lineId, ct);
+        if (context is null) return NotFound();
+        Response.Headers.ETag = $"\"{context.DeleteVersion}\"";
+        return Ok(context.Line);
     }
 
     [HttpPost("{id:int}/copy")]
@@ -90,6 +126,7 @@ public sealed class DialoguesController(IDialogueCatalog catalog) : ControllerBa
         return validation is null ? NotFound() : Ok(validation);
     }
 
-    public sealed record DialogueInput([Required, StringLength(160)] string Title);
-    public sealed record MinimumLevelInput([property: JsonRequired] [Range(1, int.MaxValue)] int? MinimumPlayerLevel);
+    public sealed record DialogueInput([Required, StringLength(160)] string Title, [StringLength(64, MinimumLength = 64)] string? Version = null);
+    public sealed record MinimumLevelInput([property: JsonRequired] [Range(1, int.MaxValue)] int? MinimumPlayerLevel,
+        [StringLength(64, MinimumLength = 64)] string? Version = null);
 }

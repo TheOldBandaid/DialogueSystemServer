@@ -21,11 +21,29 @@ internal sealed class SqliteLines(DialogueDbContext db) : ILineStore
     public async Task<Dialogue?> FindDialogueAsync(int id, CancellationToken ct) =>
         await db.Dialogues.FindAsync([id], ct);
 
+    public Task<long?> DialogueRevisionAsync(int id, CancellationToken ct) =>
+        db.Dialogues.Where(dialogue => dialogue.Id == id).Select(dialogue => (long?)dialogue.Revision).SingleOrDefaultAsync(ct);
+
     public Task<List<LineSummary>> ListAsync(int id, CancellationToken ct) =>
-        db.Lines.Where(line => line.DialogueId == id).OrderBy(line => line.Id)
+        db.Lines.Where(line => line.DialogueId == id).OrderBy(line => line.Id).Take(CatalogLimits.LegacyListSize)
             .Select(line => new LineSummary(line.Id, line.Speaker.Name, line.Text, line.IsEnding,
                 line.IsStoryBranch, line.SpeakerId))
             .ToListAsync(ct);
+
+    public async Task<CatalogPage<LineReference>?> PageAsync(int id, string? query, int? before, bool branchesOnly, CancellationToken ct)
+    {
+        var selected = db.Lines.Where(line => line.DialogueId == id);
+        if (before.HasValue) selected = selected.Where(line => line.Id < before.Value);
+        if (branchesOnly) selected = selected.Where(line => line.IsStoryBranch);
+        var search = query?.Trim();
+        if (!string.IsNullOrEmpty(search))
+            selected = selected.Where(line => SqliteSearch.Contains(line.Text, search) || SqliteSearch.Contains(line.Speaker.Name, search));
+        var page = await CatalogQueries.PageAsync(selected.OrderByDescending(line => line.Id)
+            .Select(line => new LineReference(line.Id, line.Speaker.Name,
+                line.Text.Length > 240 ? line.Text.Substring(0, 240) + "…" : line.Text,
+                line.IsEnding, line.IsStoryBranch, line.SpeakerId)), line => line.Id, ct);
+        return page.Items.Count == 0 && !await DialogueExistsAsync(id, ct) ? null : page;
+    }
 
     public Task<DialogueLine?> FindLineAsync(int id, int lineId, CancellationToken ct) =>
         db.Lines.SingleOrDefaultAsync(line => line.DialogueId == id && line.Id == lineId, ct);

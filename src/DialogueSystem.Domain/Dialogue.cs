@@ -5,6 +5,7 @@ public sealed class Character
     public int Id { get; set; }
     public string Key { get; set; } = Guid.NewGuid().ToString("N");
     public string? OriginKey { get; set; }
+    public long Revision { get; set; }
     public required string Name { get; set; }
 }
 
@@ -16,6 +17,7 @@ public sealed class Dialogue
     public int? MinimumPlayerLevel { get; set; }
     public long Revision { get; set; }
     public List<DialogueLine> Lines { get; } = [];
+    public long ActivityRevision { get; set; }
 }
 
 public sealed class DialogueLine

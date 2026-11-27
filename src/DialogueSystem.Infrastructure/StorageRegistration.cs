@@ -19,7 +19,7 @@ public static class StorageRegistration
             .AddSingleton(_ => new DatabaseBackups(dataDirectory))
             .AddSingleton(_ => new SessionEpoch(dataDirectory))
             .AddSingleton<GraphSnapshots>()
-            .AddDbContext<DialogueDbContext>(options => options.UseSqlite(connection.ToString()))
+            .AddDbContext<DialogueDbContext>(options => options.UseSqlite(connection.ToString()).AddInterceptors(new SqliteSearch()))
             .AddScoped<IAccountStore, SqliteAccounts>()
             .AddScoped<IPasswordService, PasswordService>()
             .AddScoped<IDialogueCatalog, SqliteDialogueCatalog>()

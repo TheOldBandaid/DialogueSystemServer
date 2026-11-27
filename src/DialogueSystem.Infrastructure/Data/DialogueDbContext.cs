@@ -15,6 +15,7 @@ public sealed class DialogueDbContext(DbContextOptions<DialogueDbContext> option
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.HasDbFunction(typeof(SqliteSearch).GetMethod(nameof(SqliteSearch.Contains))!).HasName("dialogue_contains");
         modelBuilder.Entity<Dialogue>().Property(dialogue => dialogue.Id).ValueGeneratedOnAdd();
         modelBuilder.Entity<DialogueRevision>().HasOne<Dialogue>().WithMany()
             .HasForeignKey(revision => revision.DialogueId).OnDelete(DeleteBehavior.Cascade);

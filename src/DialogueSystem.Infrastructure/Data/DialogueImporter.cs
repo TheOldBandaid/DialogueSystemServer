@@ -80,6 +80,7 @@ internal static class DialogueImporter
             NextState = DialogueChoice.NormalizeStoryState(choice.NextState)
         }));
         await db.SaveChangesAsync(cancellationToken);
-        return new DialogueSummary(dialogue.Id, dialogue.Title, dialogue.StartLineId, dialogue.MinimumPlayerLevel);
+        await db.Entry(dialogue).ReloadAsync(cancellationToken);
+        return new DialogueSummary(dialogue.Id, dialogue.Title, dialogue.StartLineId, dialogue.MinimumPlayerLevel, dialogue.Revision, dialogue.ActivityRevision);
     }
 }

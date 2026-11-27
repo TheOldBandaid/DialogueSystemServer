@@ -9,7 +9,7 @@ public sealed record ChoiceChange(
 public enum EditStatus { Saved, NotFound, Invalid, Conflict }
 
 public sealed record EditResult(EditStatus Status, string? Detail = null,
-    LineSummary? NewLine = null, DialogueChoice? NewChoice = null);
+    LineSummary? NewLine = null, ChoiceSummary? NewChoice = null);
 
 public interface ILineStore
 {
@@ -18,7 +18,9 @@ public interface ILineStore
     Task<int> CountLinesAsync(int id, CancellationToken ct);
     Task<int> CountChoicesAsync(int id, CancellationToken ct);
     Task<Dialogue?> FindDialogueAsync(int id, CancellationToken ct);
+    Task<long?> DialogueRevisionAsync(int id, CancellationToken ct);
     Task<List<LineSummary>> ListAsync(int id, CancellationToken ct);
+    Task<CatalogPage<LineReference>?> PageAsync(int id, string? query, int? before, bool branchesOnly, CancellationToken ct);
     Task<DialogueLine?> FindLineAsync(int id, int lineId, CancellationToken ct);
     Task<bool> LineExistsAsync(int id, int lineId, CancellationToken ct);
     Task<Character?> FindCharacterAsync(int id, CancellationToken ct);
@@ -41,6 +43,15 @@ public sealed class LineEditor(ILineStore store)
 {
     public async Task<List<LineSummary>?> ListAsync(int id, CancellationToken ct) =>
         await store.DialogueExistsAsync(id, ct) ? await store.ListAsync(id, ct) : null;
+
+    public Task<CatalogPage<LineReference>?> PageAsync(int id, string? query, int? before, bool branchesOnly, CancellationToken ct) =>
+        store.PageAsync(id, query, before, branchesOnly, ct);
+
+    public async Task<ChoiceSummary?> FindChoiceAsync(int id, int lineId, int choiceId, CancellationToken ct)
+    {
+        var choice = await store.FindChoiceAsync(id, lineId, choiceId, ct);
+        return choice is null ? null : SummarizeChoice(choice);
+    }
 
     public async Task<EditResult> CreateAsync(int id, LineChange input, CancellationToken ct)
     {
@@ -92,12 +103,14 @@ public sealed class LineEditor(ILineStore store)
         return new(EditStatus.Saved);
     }
 
-    public async Task<EditResult> SetStartAsync(int id, int? lineId, CancellationToken ct)
+    public async Task<EditResult> SetStartAsync(int id, int? lineId, string version, CancellationToken ct)
     {
         await using var transaction = await store.BeginAsync(ct);
         var dialogue = await store.FindDialogueAsync(id, ct);
         if (dialogue is null)
             return new(EditStatus.NotFound);
+        if (version != EditVersions.Dialogue(id, dialogue.Revision))
+            return new(EditStatus.Conflict, "Диалог уже изменился. Обновите его перед назначением старта.");
         if (lineId is int start && !await store.LineExistsAsync(id, start, ct))
             return new(EditStatus.Invalid, "Стартовая реплика должна принадлежать этому диалогу.");
 
@@ -107,12 +120,15 @@ public sealed class LineEditor(ILineStore store)
         return new(EditStatus.Saved);
     }
 
-    public async Task<EditResult> DeleteAsync(int id, int lineId, CancellationToken ct)
+    public async Task<EditResult> DeleteAsync(int id, int lineId, string version, CancellationToken ct)
     {
         await using var transaction = await store.BeginAsync(ct);
         var line = await store.FindLineAsync(id, lineId, ct);
         if (line is null)
             return new(EditStatus.NotFound);
+        var revision = await store.DialogueRevisionAsync(id, ct);
+        if (version != EditVersions.LineDeletion(lineId, EditVersions.Line(line.SpeakerId, line.Text, line.IsEnding, line.IsStoryBranch), revision!.Value))
+            return new(EditStatus.Conflict, "Реплика или её связи уже изменились. Обновите контекст перед удалением.");
         if (await store.IsStartAsync(id, lineId, ct) || await store.HasIncomingAsync(id, lineId, ct))
             return new(EditStatus.Conflict, "Перенесите старт или измените входящие переходы перед удалением.");
 
@@ -123,8 +139,17 @@ public sealed class LineEditor(ILineStore store)
         return new(EditStatus.Saved);
     }
 
-    public Task<bool> DeleteChoiceAsync(int id, int lineId, int choiceId, CancellationToken ct) =>
-        store.DeleteChoiceAsync(id, lineId, choiceId, ct);
+    public async Task<EditResult> DeleteChoiceAsync(int id, int lineId, int choiceId, string version, CancellationToken ct)
+    {
+        await using var transaction = await store.BeginAsync(ct);
+        var choice = await store.FindChoiceAsync(id, lineId, choiceId, ct);
+        if (choice is null) return new(EditStatus.NotFound);
+        if (version != EditVersions.Choice(choice.TargetLineId, choice.Text, choice.Position, choice.RequiredState, choice.NextState))
+            return new(EditStatus.Conflict, "Вариант ответа уже изменился. Обновите реплику перед удалением.");
+        await store.DeleteChoiceAsync(id, lineId, choiceId, ct);
+        await transaction.CommitAsync(ct);
+        return new(EditStatus.Saved);
+    }
 
     public async Task<EditResult> MoveChoiceAsync(int id, int lineId, int choiceId, int direction, string version, CancellationToken ct)
     {
@@ -178,6 +203,9 @@ public sealed class LineEditor(ILineStore store)
             store.AddChoice(choice);
         await store.SaveAsync(ct);
         await transaction.CommitAsync(ct);
-        return new(EditStatus.Saved, NewChoice: choiceId is null ? choice : null);
+        return new(EditStatus.Saved, NewChoice: choiceId is null ? SummarizeChoice(choice) : null);
     }
+
+    private static ChoiceSummary SummarizeChoice(DialogueChoice choice) => new(choice.Id, choice.DialogueId,
+        choice.SourceLineId, choice.TargetLineId, choice.Text, choice.Position, choice.RequiredState, choice.NextState);
 }

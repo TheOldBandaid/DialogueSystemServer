@@ -5,6 +5,10 @@ namespace DialogueSystem.Application;
 
 public static class EditVersions
 {
+    public static string Dialogue(int id, long revision) => Hash(new { kind = "dialogue", id, revision });
+    public static string DialogueDeletion(int id, long revision, long activityRevision) => Hash(new { kind = "dialogue-delete", id, revision, activityRevision });
+    public static string Character(int id, long revision) => Hash(new { kind = "character", id, revision });
+    public static string LineDeletion(int id, string version, long revision) => Hash(new { kind = "line-delete", id, version, revision });
     public static string Line(int speakerId, string text, bool isEnding, bool isStoryBranch) =>
         Hash(new { speakerId, text, isEnding, isStoryBranch });
 

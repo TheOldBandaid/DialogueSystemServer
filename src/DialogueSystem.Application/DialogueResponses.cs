@@ -2,7 +2,12 @@ using System.ComponentModel.DataAnnotations;
 
 namespace DialogueSystem.Application;
 
-public sealed record DialogueSummary(int Id, string Title, int? StartLineId, int? MinimumPlayerLevel = null);
+public sealed record DialogueSummary(int Id, string Title, int? StartLineId, int? MinimumPlayerLevel = null,
+    long Revision = 0, long ActivityRevision = 0)
+{
+    public string Version => EditVersions.Dialogue(Id, Revision);
+    public string DeleteVersion => EditVersions.DialogueDeletion(Id, Revision, ActivityRevision);
+}
 
 public sealed record DialogueOverview(int Id, string Title, bool HasStart, int? MinimumPlayerLevel,
     int LineCount, int BranchCount, int EndingCount);
@@ -22,7 +27,24 @@ public sealed record ChoiceLink(
 public sealed record LineContext(
     LineSummary Line,
     IReadOnlyList<ChoiceLink> Incoming,
-    IReadOnlyList<ChoiceLink> Outgoing);
+    IReadOnlyList<ChoiceLink> Outgoing)
+{
+    public DialogueSummary? Dialogue { get; init; }
+    public string? DeleteVersion { get; init; }
+    public int IncomingCount { get; init; }
+    public int OutgoingCount { get; init; }
+    public IncomingChoiceCursor? NextIncoming { get; init; }
+    public int? NextOutgoingPosition { get; init; }
+    public int SuggestedChoicePosition { get; init; } = 1;
+}
+
+public sealed record IncomingChoiceCursor(int SourceLineId, int Position);
+
+public sealed record ChoiceSummary(int Id, int DialogueId, int SourceLineId, int TargetLineId,
+    string Text, int Position, string? RequiredState, string? NextState)
+{
+    public string Version => EditVersions.Choice(TargetLineId, Text, Position, RequiredState, NextState);
+}
 
 public sealed record DialogueValidation(IReadOnlyList<string> Errors, IReadOnlyList<int> UnreachableLineIds)
 {

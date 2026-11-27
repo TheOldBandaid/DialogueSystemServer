@@ -195,11 +195,15 @@ public sealed class DialogueApiTests
         var otherHistoryRoute = $"{otherRoute}/previews/{otherPreview.PreviewId}/history";
         var history = await editor.Get<PreviewHistory>(historyRoute);
         var otherHistory = await editor.Get<PreviewHistory>(otherHistoryRoute);
+        other = await editor.Get<DialogueSummary>(otherRoute);
 
         await guest.Expect(Unauthorized, HttpMethod.Delete, route);
         await editor.Expect(BadRequest, HttpMethod.Delete, route, includeToken: false);
         await editor.Expect(NoContent, HttpMethod.Put, route, new { title = " Архивная экспедиция " });
-        Assert.Equal(original with { Title = "Архивная экспедиция" }, await editor.Get<DialogueSummary>(route));
+        var renamed = await editor.Get<DialogueSummary>(route);
+        Assert.Equal((original.Id, "Архивная экспедиция", original.StartLineId, original.MinimumPlayerLevel),
+            (renamed.Id, renamed.Title, renamed.StartLineId, renamed.MinimumPlayerLevel));
+        Assert.NotEqual(original.Version, renamed.Version);
         Assert.Equal(history.Steps.ToArray(), (await editor.Get<PreviewHistory>(historyRoute)).Steps.ToArray());
 
         await editor.Expect(NoContent, HttpMethod.Delete, route);

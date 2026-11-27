@@ -10,12 +10,14 @@ let pendingOperations = 0;
 let signedInId;
 
 export async function api(path, method = "GET", body) {
+  const headers = method === "GET" ? {} : { "X-CSRF-TOKEN": token, "Content-Type": "application/json" };
+  if (method === "DELETE" && body?.version) {
+    headers["If-Match"] = `"${body.version}"`;
+    body = undefined;
+  }
   const response = await fetch(path, {
     method,
-    headers: method === "GET" ? {} : {
-      "X-CSRF-TOKEN": token,
-      "Content-Type": "application/json"
-    },
+    headers,
     body: body === undefined ? undefined : JSON.stringify(body)
   });
   const result = response.headers.get("content-type")?.includes("json") ? await response.json() : null;

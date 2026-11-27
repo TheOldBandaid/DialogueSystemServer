@@ -12,6 +12,22 @@ namespace DialogueSystem.Web.Controllers;
 [Route("api/dialogues/{id:int}")]
 public sealed class DialogueLinesController(LineEditor editor) : ControllerBase
 {
+    [HttpGet("lines/{lineId:int}/choices/{choiceId:int}")]
+    public async Task<ActionResult<ChoiceSummary>> GetChoice(int id, int lineId, int choiceId, CancellationToken ct)
+    {
+        var choice = await editor.FindChoiceAsync(id, lineId, choiceId, ct);
+        if (choice is null) return NotFound();
+        Response.Headers.ETag = $"\"{choice.Version}\"";
+        return Ok(choice);
+    }
+    [HttpGet("lines/page")]
+    public async Task<ActionResult<CatalogPage<LineReference>>> Page(int id,
+        [FromQuery, StringLength(CatalogLimits.SearchLength)] string? q,
+        [FromQuery, Range(1, int.MaxValue)] int? before, bool branchesOnly, CancellationToken ct)
+    {
+        var page = await editor.PageAsync(id, q, before, branchesOnly, ct);
+        return page is null ? NotFound() : Ok(page);
+    }
     [HttpGet("lines")]
     public async Task<ActionResult<List<LineSummary>>> List(int id, CancellationToken ct)
     {
@@ -34,11 +50,14 @@ public sealed class DialogueLinesController(LineEditor editor) : ControllerBase
 
     [HttpPut("start")]
     public async Task<IActionResult> SetStart(int id, StartInput input, CancellationToken ct) =>
-        EditResponse(await editor.SetStartAsync(id, input.LineId, ct));
+        input.Version is null ? VersionPreconditions.Missing() : EditResponse(await editor.SetStartAsync(id, input.LineId, input.Version, ct));
 
     [HttpDelete("lines/{lineId:int}")]
-    public async Task<IActionResult> Delete(int id, int lineId, CancellationToken ct) =>
-        EditResponse(await editor.DeleteAsync(id, lineId, ct));
+    public async Task<IActionResult> Delete(int id, int lineId, [FromHeader(Name = "If-Match")] string? version, CancellationToken ct)
+    {
+        var error = VersionPreconditions.Header(version, out var expected);
+        return error ?? EditResponse(await editor.DeleteAsync(id, lineId, expected, ct));
+    }
 
     [HttpPost("lines/{lineId:int}/choices")]
     public async Task<IActionResult> CreateChoice(int id, int lineId, ChoiceInput input, CancellationToken ct)
@@ -54,8 +73,12 @@ public sealed class DialogueLinesController(LineEditor editor) : ControllerBase
         input.Version is null ? MissingVersion() : EditResponse(await editor.SaveChoiceAsync(id, lineId, choiceId, input.ToChange(), ct));
 
     [HttpDelete("lines/{lineId:int}/choices/{choiceId:int}")]
-    public async Task<IActionResult> DeleteChoice(int id, int lineId, int choiceId, CancellationToken ct) =>
-        await editor.DeleteChoiceAsync(id, lineId, choiceId, ct) ? NoContent() : NotFound();
+    public async Task<IActionResult> DeleteChoice(int id, int lineId, int choiceId,
+        [FromHeader(Name = "If-Match")] string? version, CancellationToken ct)
+    {
+        var error = VersionPreconditions.Header(version, out var expected);
+        return error ?? EditResponse(await editor.DeleteChoiceAsync(id, lineId, choiceId, expected, ct));
+    }
 
     [HttpPost("lines/{lineId:int}/choices/{choiceId:int}/move")]
     public async Task<IActionResult> MoveChoice(int id, int lineId, int choiceId, MoveChoiceInput input, CancellationToken ct) =>
@@ -83,7 +106,7 @@ public sealed class DialogueLinesController(LineEditor editor) : ControllerBase
         internal LineChange ToChange() => new(SpeakerId, Text, IsEnding, IsStoryBranch, Version);
     }
 
-    public sealed record StartInput(int? LineId);
+    public sealed record StartInput(int? LineId, [StringLength(64, MinimumLength = 64)] string? Version = null);
 
     public sealed record ChoiceInput([Range(1, int.MaxValue)] int TargetLineId,
         [Required, StringLength(500)] string Text, [Range(1, int.MaxValue)] int Position,
