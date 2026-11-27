@@ -4,6 +4,9 @@ const filters = byId("catalog-filters");
 const items = byId("catalog-items");
 const result = byId("catalog-result");
 let dialogues = [];
+let cursor;
+let generation = 0;
+let filterTimer;
 
 function card(dialogue) {
   const item = document.createElement("li");
@@ -43,24 +46,31 @@ function card(dialogue) {
 }
 
 function renderCatalog() {
-  const search = filters.elements.q.value.trim().toLocaleLowerCase("ru-RU");
-  const start = filters.elements.start.value;
-  const visible = dialogues.filter(dialogue => {
-    const matchesSearch = dialogue.title.toLocaleLowerCase("ru-RU").includes(search);
-    const matchesStart = start === "" || (start === "set") === dialogue.hasStart;
-    return matchesSearch && matchesStart;
-  });
-  items.replaceChildren(...visible.map(card));
+  items.replaceChildren(...dialogues.map(card));
+  byId("catalog-more").hidden = cursor == null;
   if (dialogues.length === 0) {
-    result.textContent = "Диалогов пока нет. Создайте новый или загрузите JSON.";
-  } else if (visible.length === 0) {
-    result.textContent = "По выбранным фильтрам ничего не найдено.";
+    result.textContent = filters.elements.q.value || filters.elements.start.value
+      ? "По выбранным фильтрам ничего не найдено." : "Диалогов пока нет. Создайте новый или загрузите JSON.";
   } else {
-    result.textContent = `Показано ${visible.length} из ${dialogues.length}`;
+    result.textContent = `Показано ${dialogues.length}${cursor == null ? "" : " · есть ещё"}`;
   }
 }
 
-function filterCatalog() {
+async function loadCatalog(before) {
+  const request = ++generation;
+  const query = new URLSearchParams();
+  if (filters.elements.q.value.trim()) query.set("q", filters.elements.q.value.trim());
+  if (filters.elements.start.value) query.set("hasStart", filters.elements.start.value === "set");
+  if (before != null) query.set("before", before);
+  const page = await api(`/api/dialogues/page?${query}`);
+  if (request !== generation) return;
+  if (before == null) dialogues = page.items;
+  else dialogues.push(...page.items);
+  cursor = page.nextBeforeId;
+  renderCatalog();
+}
+
+function filterCatalog(immediate = false) {
   const url = new URL(location.href);
   for (const name of ["q", "start"]) {
     const value = filters.elements[name].value.trim();
@@ -68,14 +78,18 @@ function filterCatalog() {
     else url.searchParams.delete(name);
   }
   history.replaceState(null, "", url);
-  renderCatalog();
+  generation++;
+  clearTimeout(filterTimer);
+  if (immediate) run(() => loadCatalog())();
+  else filterTimer = setTimeout(run(() => loadCatalog()), 250);
 }
 
-filters.addEventListener("input", filterCatalog);
+filters.addEventListener("input", () => filterCatalog());
 filters.onsubmit = event => {
   event.preventDefault();
-  filterCatalog();
+  filterCatalog(true);
 };
+byId("catalog-more").onclick = run(() => loadCatalog(cursor));
 byId("new-dialogue").onsubmit = run(async event => {
   const input = Object.fromEntries(new FormData(event.currentTarget));
   const created = await api("/api/dialogues", "POST", input);
@@ -99,6 +113,5 @@ await initializeWorkspace(async () => {
   filters.elements.q.value = query.get("q") ?? "";
   filters.elements.start.value = query.get("start") ?? "";
   if (filters.elements.start.selectedIndex < 0) filters.elements.start.value = "";
-  dialogues = await api("/api/dialogues/overview");
-  renderCatalog();
+  await loadCatalog();
 });

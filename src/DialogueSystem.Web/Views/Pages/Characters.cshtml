@@ -12,6 +12,9 @@
     <button>Создать персонажа</button>
   </form>
   <p id="characters-empty" hidden>В справочнике пока нет персонажей.</p>
+  <label>Поиск персонажа <input type="search" id="character-search" maxlength="160"></label>
+  <button type="button" id="characters-more" hidden>Показать ещё персонажей</button>
+  <button type="button" id="characters-refresh">Обновить данные</button>
   <div id="character-details" hidden>
     <label>Персонаж <select id="character-picker"></select></label>
     <form id="rename-character" class="actions">
@@ -22,10 +25,13 @@
     <h2>Реплики персонажа</h2>
     <p id="character-usage" role="status"></p>
     <ul id="character-dialogues"></ul>
+    <button type="button" id="character-usage-more" hidden>Показать ещё диалоги персонажа</button>
     <details id="reassignment-panel" hidden>
       <summary>Переназначение реплик</summary>
       <form id="reassign-speaker" class="actions">
         <label>Новый говорящий <select name="targetCharacterId" required></select></label>
+        <label>Поиск нового говорящего <input type="search" id="reassign-search" maxlength="160"></label>
+        <button type="button" id="reassign-more" hidden>Показать ещё кандидатов</button>
         <label>Где заменить <select name="dialogueId"></select></label>
         <button>Переназначить реплики</button>
       </form>
