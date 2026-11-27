@@ -9,7 +9,8 @@ internal static class MaintenanceCommands
     public static async Task<int> RunAsync(string command, IServiceProvider services, IConfiguration configuration)
     {
         try { return await RunCoreAsync(command, services, configuration); }
-        catch (Exception error) when (error is IOException or ArgumentException or System.ComponentModel.DataAnnotations.ValidationException or Microsoft.Data.Sqlite.SqliteException)
+        catch (Exception error) when (error is IOException or InvalidDataException or ArgumentException or
+            System.ComponentModel.DataAnnotations.ValidationException or Microsoft.Data.Sqlite.SqliteException)
         {
             Console.Error.WriteLine(error.Message);
             return 1;
