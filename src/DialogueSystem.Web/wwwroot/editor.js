@@ -536,7 +536,14 @@ byId("refresh-preview-history").onclick = refreshHistory;
 previewSessions.onchange = run(() => showPreviewHistory(previewSessions.value));
 byId("preview-sessions-more").onclick = run(async () => {
   if (!sessionCursor) return;
-  const page = await api(`${path()}/previews/page?before=${sessionCursor}`);
+  let page;
+  try { page = await api(`${path()}/previews/page?before=${sessionCursor}`); }
+  catch (error) {
+    if (error.status !== 404) throw error;
+    await loadPreviewHistory(null);
+    byId("preview-history-message").textContent = "Список прохождений изменился. Загружена первая страница.";
+    return;
+  }
   previewSessions.append(...page.items.map(previewSessionOption));
   sessionCursor = page.nextBeforeId;
   byId("preview-sessions-more").hidden = sessionCursor == null;
