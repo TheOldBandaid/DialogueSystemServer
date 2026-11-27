@@ -70,11 +70,14 @@ public sealed class AccountsController(AccountService accounts, LoginProtection 
     public async Task<ActionResult<AccountSummary>> Create(
         CreateAccountRequest request, CancellationToken cancellationToken)
     {
-        var account = await accounts.CreateAsync(request.Login, request.Password, request.Role, cancellationToken);
-        if (account is null)
-            return Conflict(new ProblemDetails { Detail = "Пользователь с таким именем уже существует." });
-
-        return CreatedAtAction(nameof(Get), new { id = account.Id }, account);
+        var result = await accounts.CreateAsync(SessionPrincipal.Session(User), request.Login, request.Password, request.Role, cancellationToken);
+        return result.Status switch
+        {
+            AccountCreationStatus.Created => CreatedAtAction(nameof(Get), new { id = result.Account!.Id }, result.Account),
+            AccountCreationStatus.DuplicateLogin => Conflict(new ProblemDetails { Detail = "Пользователь с таким именем уже существует." }),
+            AccountCreationStatus.Forbidden => Forbid(),
+            _ => throw new InvalidOperationException()
+        };
     }
 
     [HttpGet("{id:int}")]
@@ -90,10 +93,11 @@ public sealed class AccountsController(AccountService accounts, LoginProtection 
     [Authorize(Roles = AccountRoles.Administrator)]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> SetRole(int id, RoleRequest request, CancellationToken cancellationToken) =>
-        request.Version is null ? VersionPreconditions.Missing() : await accounts.ChangeRoleAsync(id, request.Role, request.Version, cancellationToken) switch
+        request.Version is null ? VersionPreconditions.Missing() : await accounts.ChangeRoleAsync(SessionPrincipal.Session(User), id, request.Role, request.Version, cancellationToken) switch
         {
             RoleChange.Changed => NoContent(),
             RoleChange.NotFound => NotFound(),
+            RoleChange.Forbidden => Forbid(),
             RoleChange.LastAdministrator => Conflict(new ProblemDetails
             {
                 Detail = "В системе должен остаться администратор."

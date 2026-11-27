@@ -25,7 +25,11 @@ internal static class SessionPrincipal
         int.Parse(principal.FindFirstValue(ClaimTypes.NameIdentifier)!, CultureInfo.InvariantCulture);
 
     public static AccountSummary Summary(ClaimsPrincipal principal) =>
-        new(UserId(principal), principal.Identity!.Name!, principal.FindFirstValue(ClaimTypes.Role)!, MustChangePassword(principal));
+        Session(principal).Summary;
+
+    public static AccountSession Session(ClaimsPrincipal principal) =>
+        new(UserId(principal), principal.Identity!.Name!, principal.FindFirstValue(ClaimTypes.Role)!,
+            int.Parse(principal.FindFirstValue(VersionClaim) ?? "0", CultureInfo.InvariantCulture), MustChangePassword(principal));
 
     public static bool MustChangePassword(ClaimsPrincipal principal) => principal.FindFirstValue(ChangePasswordClaim) == "true";
 

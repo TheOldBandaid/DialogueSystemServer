@@ -19,7 +19,9 @@ public sealed record AccountSession(int Id, string Login, string Role, int Versi
     public AccountSummary Summary => new(Id, Login, Role, MustChangePassword);
 }
 
-public enum RoleChange { Changed, NotFound, LastAdministrator, StaleAccount }
+public enum RoleChange { Changed, NotFound, LastAdministrator, StaleAccount, Forbidden }
+public enum AccountCreationStatus { Created, DuplicateLogin, Forbidden }
+public sealed record AccountCreation(AccountCreationStatus Status, AccountSummary? Account = null);
 public enum PasswordChange { Changed, WrongPassword, SamePassword, StaleAccount }
 public enum PasswordReset { Changed, NotFound, WrongPassword, Forbidden, OwnAccount, StaleAccount }
 public sealed record InitialAccountsStatus(bool AdminExists, bool EditorExists, bool HasAdministrator);
@@ -68,10 +70,13 @@ public sealed class AccountService(IAccountStore store, IPasswordService passwor
     {
         if (await store.FindByLoginAsync(AccountRules.NormalizeLogin(login), ct) is not null)
             return false;
-        return await CreateAsync(login, password, role, ct) is not null;
+        return (await CreateAccountAsync(null, login, password, role, ct)).Status == AccountCreationStatus.Created;
     }
 
-    public async Task<AccountSummary?> CreateAsync(string login, string password, string role, CancellationToken ct)
+    public Task<AccountCreation> CreateAsync(AccountSession administrator, string login, string password, string role, CancellationToken ct) =>
+        CreateAccountAsync(administrator, login, password, role, ct);
+
+    private async Task<AccountCreation> CreateAccountAsync(AccountSession? administrator, string login, string password, string role, CancellationToken ct)
     {
         var normalized = AccountRules.NormalizeLogin(login);
         AccountRules.Validate(normalized, password, role);
@@ -79,18 +84,21 @@ public sealed class AccountService(IAccountStore store, IPasswordService passwor
         account.PasswordHash = passwords.Hash(account, password);
 
         await using var transaction = await store.BeginAsync(ct);
+        if (administrator is not null && !await IsCurrentAdministratorAsync(administrator, ct))
+            return new(AccountCreationStatus.Forbidden);
         if (await store.FindByLoginAsync(account.Login, ct) is not null)
-            return null;
+            return new(AccountCreationStatus.DuplicateLogin);
 
         await store.AddAsync(account, ct);
         await transaction.CommitAsync(ct);
-        return new(account.Id, account.Login, account.Role);
+        return new(AccountCreationStatus.Created, new(account.Id, account.Login, account.Role));
     }
 
-    public async Task<RoleChange> ChangeRoleAsync(int id, string role, string version, CancellationToken ct)
+    public async Task<RoleChange> ChangeRoleAsync(AccountSession administrator, int id, string role, string version, CancellationToken ct)
     {
         AccountRules.ValidateRole(role);
         await using var transaction = await store.BeginAsync(ct);
+        if (!await IsCurrentAdministratorAsync(administrator, ct)) return RoleChange.Forbidden;
         var account = await store.GetSessionAsync(id, ct);
         if (account is null)
             return RoleChange.NotFound;
@@ -103,6 +111,14 @@ public sealed class AccountService(IAccountStore store, IPasswordService passwor
         await store.SetRoleAsync(id, role, ct);
         await transaction.CommitAsync(ct);
         return RoleChange.Changed;
+    }
+
+    private async Task<bool> IsCurrentAdministratorAsync(AccountSession administrator, CancellationToken ct)
+    {
+        var current = await store.GetSessionAsync(administrator.Id, ct);
+        return administrator.Role == AccountRoles.Administrator && !administrator.MustChangePassword &&
+            current is { Role: AccountRoles.Administrator, MustChangePassword: false } &&
+            current.Version == administrator.Version;
     }
 
     public async Task<PasswordChange> ChangePasswordAsync(
