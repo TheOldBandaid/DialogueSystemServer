@@ -17,16 +17,21 @@ internal sealed class SqliteCleanup(DialogueDbContext db, DatabaseBackups backup
 
     public async Task<CleanupOutcome> ApplyAsync(int dialogueId, int userId, CleanupCriteria criteria, string confirmationToken, CancellationToken ct)
     {
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-        var selection = await SelectAsync(dialogueId, userId, criteria, ct);
-        if (selection.Outcome.Status != CleanupStatus.Ready) return selection.Outcome;
-        var plan = selection.Outcome.Plan!;
+        var planned = await PlanAsync(dialogueId, userId, criteria, ct);
+        if (planned.Status != CleanupStatus.Ready) return planned;
+        var plan = planned.Plan!;
         if (!string.Equals(confirmationToken, plan.ConfirmationToken, StringComparison.Ordinal))
             return new(CleanupStatus.Stale, Detail: "Состав данных изменился. Снова рассчитайте очистку перед подтверждением.");
         if (plan.PreviewCount + plan.RevisionCount == 0)
             return new(CleanupStatus.Ready, Summary: new(0, 0, 0, false));
 
         await backups.CreateAsync(BackupKind.Cleanup, ct);
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        var selection = await SelectAsync(dialogueId, userId, criteria, ct);
+        if (selection.Outcome.Status != CleanupStatus.Ready) return selection.Outcome;
+        if (!string.Equals(confirmationToken, selection.Outcome.Plan!.ConfirmationToken, StringComparison.Ordinal))
+            return new(CleanupStatus.Stale, Detail: "Данные изменились за время копирования. Снова рассчитайте очистку перед подтверждением.");
+
         var previewIds = selection.Previews.Select(preview => preview.Id).ToArray();
         var revisionIds = selection.Revisions.Select(revision => revision.Id).ToArray();
         var removedPreviews = previewIds.Length == 0 ? 0 : await db.Previews.Where(preview => previewIds.Contains(preview.Id)).ExecuteDeleteAsync(ct);
@@ -44,7 +49,9 @@ internal sealed class SqliteCleanup(DialogueDbContext db, DatabaseBackups backup
         if (actor is null || actor.MustChangePassword || actor.Role is not (AccountRoles.Editor or AccountRoles.Administrator) ||
             criteria.AllUsers && actor.Role != AccountRoles.Administrator)
             return new(new(CleanupStatus.Forbidden), [], []);
-        if (!await db.Dialogues.AnyAsync(dialogue => dialogue.Id == dialogueId, ct)) return new(new(CleanupStatus.NotFound), [], []);
+        var activityRevision = await db.Dialogues.Where(dialogue => dialogue.Id == dialogueId)
+            .Select(dialogue => (long?)dialogue.ActivityRevision).SingleOrDefaultAsync(ct);
+        if (activityRevision is null) return new(new(CleanupStatus.NotFound), [], []);
         var previews = new List<PreviewCandidate>();
         var revisions = new List<RevisionCandidate>();
         if (criteria.Previews)
@@ -72,7 +79,7 @@ internal sealed class SqliteCleanup(DialogueDbContext db, DatabaseBackups backup
         if (previews.Count > BatchSize) previews.RemoveAt(BatchSize);
         if (revisions.Count > BatchSize) revisions.RemoveAt(BatchSize);
         var token = Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(new
-            { dialogueId, userId, criteria, previews, revisions })));
+            { dialogueId, userId, criteria, activityRevision, previews, revisions })));
         var plan = new CleanupPlan(previews.Count, revisions.Count, previews.Sum(preview => preview.HistoryCount), hasMore, token);
         return new(new(CleanupStatus.Ready, Plan: plan), previews, revisions);
     }
