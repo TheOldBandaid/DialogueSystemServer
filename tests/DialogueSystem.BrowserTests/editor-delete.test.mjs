@@ -39,7 +39,7 @@ test("dialogue deletion refreshes activity before confirmation and still rejects
   globalThis.fetch = async (path, input = {}) => {
     if (path === "/api/accounts/me") return Response.json({ id: 1, login: "editor", role: "Editor" });
     if (path === "/api/accounts/csrf") return Response.json({ token: "csrf" });
-    if (path.startsWith("/api/characters/page")) return Response.json({ items: [{ id: 1, name: "Персонаж" }], nextBeforeId: null });
+    if (path.startsWith("/api/characters")) return Response.json({ items: [{ id: 1, name: "Персонаж" }], nextBeforeId: null });
     if (path === "/api/dialogues/1" && input.method === "DELETE") {
       deletionHeaders.push(input.headers["If-Match"]);
       if (writeAfterConfirmation) token = "E".repeat(64);
@@ -48,7 +48,7 @@ test("dialogue deletion refreshes activity before confirmation and still rejects
         : Response.json({ detail: "Данные изменились после подтверждения." }, { status: 412 });
     }
     if (path === "/api/dialogues/1") return Response.json(dialogue());
-    if (path.startsWith("/api/dialogues/1/lines/page"))
+    if (path === "/api/dialogues/1/lines" || path.startsWith("/api/dialogues/1/lines?"))
       return Response.json({ items: path.includes("branchesOnly") ? [] : [line], nextBeforeId: null });
     if (path === "/api/dialogues/1/lines/1/context")
       return Response.json({ line, incoming: [], outgoing: [], dialogue: dialogue(), deleteVersion: line.version, nextIncoming: null, nextOutgoingPosition: null });

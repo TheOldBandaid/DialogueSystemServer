@@ -19,7 +19,7 @@ public sealed class PreviewPaginationTests
         using var admin = new DialogueApiClient(app);
         await editor.Login("editor", password);
         await admin.Login("admin", password);
-        var dialogue = (await editor.Get<DialogueSummary[]>("/api/dialogues"))[0];
+        var dialogue = (await editor.GetDialogues("/api/dialogues"))[0];
         var route = $"/api/dialogues/{dialogue.Id}/previews";
         var expected = new HashSet<Guid>();
         for (var i = 0; i < 25; i++) expected.Add((await editor.Read<PreviewStep>(HttpMethod.Post, route)).PreviewId);
@@ -28,17 +28,17 @@ public sealed class PreviewPaginationTests
             var db = scope.ServiceProvider.GetRequiredService<DialogueDbContext>();
             await db.Previews.ExecuteUpdateAsync(setters => setters.SetProperty(preview => preview.StartedAtUnixMilliseconds, 123L));
         }
-        var first = await editor.Get<PreviewSessionPage>(route + "/page");
+        var first = await editor.Get<PreviewSessionPage>(route);
         Assert.Equal(20, first.Items.Count);
         Assert.NotNull(first.NextBeforeId);
         var newer = await editor.Read<PreviewStep>(HttpMethod.Post, route);
-        var second = await editor.Get<PreviewSessionPage>($"{route}/page?before={first.NextBeforeId}");
+        var second = await editor.Get<PreviewSessionPage>($"{route}?before={first.NextBeforeId}");
         Assert.Equal(5, second.Items.Count);
         Assert.Null(second.NextBeforeId);
         Assert.True(expected.SetEquals(first.Items.Concat(second.Items).Select(item => item.PreviewId)));
         Assert.DoesNotContain(second.Items, item => item.PreviewId == newer.PreviewId);
         var other = await admin.Read<PreviewStep>(HttpMethod.Post, route);
-        await editor.Expect(NotFound, HttpMethod.Get, $"{route}/page?before={other.PreviewId}");
+        await editor.Expect(NotFound, HttpMethod.Get, $"{route}?before={other.PreviewId}");
     }
 
     [Fact]

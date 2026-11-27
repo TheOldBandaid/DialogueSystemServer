@@ -32,9 +32,9 @@ public sealed class DialogueApiTests
 
         var spec = await editor.Get<JsonElement>("/openapi/v1.json");
         Assert.True(spec.GetProperty("paths").TryGetProperty("/api/dialogues/{id}/lines/{lineId}/choices", out _));
-        var demo = Assert.Single(await editor.Get<DialogueSummary[]>("/api/dialogues"), item => item.Title == DemoTitle);
+        var demo = Assert.Single(await editor.GetDialogues("/api/dialogues"), item => item.Title == DemoTitle);
         var path = $"/api/dialogues/{demo.Id}";
-        var branch = Assert.Single(await editor.Get<LineSummary[]>($"{path}/story-branches"));
+        var branch = Assert.Single(await editor.GetLines($"{path}/lines?branchesOnly=true"));
         var context = await editor.Get<LineContext>($"{path}/lines/{branch.Id}/context");
         Assert.Equal(2, context.Incoming.Count);
         Assert.Equal(2, context.Outgoing.Count);
@@ -79,7 +79,7 @@ public sealed class DialogueApiTests
         await using var app = Start(data);
         using var editor = new DialogueApiClient(app);
         await editor.Login("editor", editorPassword);
-        var speakerId = Assert.Single(await editor.Get<Character[]>("/api/characters"), item => item.Name == "Марта").Id;
+        var speakerId = Assert.Single(await editor.GetAll<CharacterSummary>("/api/characters"), item => item.Name == "Марта").Id;
         var draft = await CreateDialogue("Архивный черновик");
         var other = await CreateDialogue("Другой диалог");
         var withoutStart = await editor.Read<DialogueValidation>(HttpMethod.Post, $"{draft}/previews", UnprocessableEntity);
@@ -93,8 +93,8 @@ public sealed class DialogueApiTests
         var ending = await AddLine(draft, "Конец", isEnding: true);
         var foreign = await AddLine(other, "Чужая реплика", isEnding: true);
 
-        await editor.Expect(BadRequest, HttpMethod.Put, $"{draft}/start", new { lineId = foreign });
-        await editor.Expect(NoContent, HttpMethod.Put, $"{draft}/start", new { lineId = start });
+        await editor.Expect(BadRequest, HttpMethod.Put, $"{draft}", new { startLineId = foreign });
+        await editor.Expect(NoContent, HttpMethod.Put, $"{draft}", new { startLineId = start });
         var first = await AddChoice(start, ending, 1);
         await AddChoice(start, loop, 2);
         await AddChoice(loop, loop, 1);
@@ -151,9 +151,9 @@ public sealed class DialogueApiTests
         using var editor = new DialogueApiClient(app);
         await editor.Login("editor", editorPassword);
 
-        var demo = Assert.Single(await editor.Get<DialogueSummary[]>("/api/dialogues"), item => item.Title == DemoTitle);
+        var demo = Assert.Single(await editor.GetDialogues("/api/dialogues"), item => item.Title == DemoTitle);
         var path = $"/api/dialogues/{demo.Id}";
-        var branch = Assert.Single(await editor.Get<LineSummary[]>($"{path}/story-branches"));
+        var branch = Assert.Single(await editor.GetLines($"{path}/lines?branchesOnly=true"));
         var startId = Assert.IsType<int>(demo.StartLineId);
         var contextPath = $"{path}/lines/{branch.Id}/context";
         var original = await editor.Get<LineContext>(contextPath);
@@ -184,7 +184,7 @@ public sealed class DialogueApiTests
         await editor.Login("editor", editorPassword);
 
         const string dialoguesPath = "/api/dialogues";
-        var dialogues = await editor.Get<DialogueSummary[]>(dialoguesPath);
+        var dialogues = await editor.GetDialogues(dialoguesPath);
         var original = Assert.Single(dialogues, item => item.Title == DemoTitle);
         var other = Assert.Single(dialogues, item => item.Id != original.Id);
         var route = $"{dialoguesPath}/{original.Id}";
@@ -211,7 +211,7 @@ public sealed class DialogueApiTests
         await editor.Expect(NotFound, HttpMethod.Get, route);
         await editor.Expect(NotFound, HttpMethod.Get, historyRoute);
         await editor.Expect(NotFound, HttpMethod.Put, route, new { title = "Архив" });
-        Assert.Equal(other, Assert.Single(await editor.Get<DialogueSummary[]>(dialoguesPath)));
+        Assert.Equal(other, Assert.Single(await editor.GetDialogues(dialoguesPath)));
         Assert.Equal(otherHistory.Steps.ToArray(), (await editor.Get<PreviewHistory>(otherHistoryRoute)).Steps.ToArray());
 
         using var scope = app.Services.CreateScope();

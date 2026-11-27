@@ -17,12 +17,6 @@ internal sealed class SqliteAccounts(DialogueDbContext db) : IAccountStore
             .Select(account => new AccountSession(account.Id, account.Login, account.Role, account.SessionVersion, account.MustChangePassword))
             .SingleOrDefaultAsync(ct);
 
-    public async Task<IReadOnlyList<AccountSummary>> ListAsync(CancellationToken ct) =>
-        await db.Accounts.OrderBy(account => account.Login)
-            .Take(CatalogLimits.LegacyListSize)
-            .Select(account => new AccountSummary(account.Id, account.Login, account.Role, account.MustChangePassword))
-            .ToListAsync(ct);
-
     public Task<CatalogPage<AccountSummary>> PageAsync(string? query, int? before, CancellationToken ct)
     {
         var selected = db.Accounts.AsQueryable();

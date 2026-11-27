@@ -2,28 +2,22 @@ namespace DialogueSystem.Application;
 
 public interface IDialogueCatalog
 {
-    Task<IReadOnlyList<DialogueSummary>> ListAsync(CancellationToken ct);
-    Task<IReadOnlyList<DialogueOverview>> OverviewAsync(CancellationToken ct);
     Task<CatalogPage<DialogueOverview>> PageAsync(string? query, bool? hasStart, int? before, CancellationToken ct);
     Task<DialogueSummary?> FindAsync(int id, CancellationToken ct);
-    Task<LineResource?> FindLineAsync(int id, int lineId, CancellationToken ct);
     Task<DialogueSummary> CreateAsync(string title, CancellationToken ct);
-    Task<ChangeStatus> RenameAsync(int id, string title, string version, CancellationToken ct);
+    Task<EditResult> UpdateAsync(int id, DialogueChange input, CancellationToken ct);
     Task<ChangeStatus> DeleteAsync(int id, string version, CancellationToken ct);
-    Task<ChangeStatus> SetMinimumLevelAsync(int id, int? minimum, string version, CancellationToken ct);
     Task<DialogueDocument?> ExportAsync(int id, CancellationToken ct);
     Task<DialogueMapSnapshot?> MapAsync(int id, CancellationToken ct);
     Task<DialogueSummary> ImportAsync(DialogueDocument document, CancellationToken ct);
     Task<DialogueSummary?> CopyAsync(int id, bool cloneCharacters, CancellationToken ct);
-    Task<LineContext?> ContextAsync(int id, int lineId, CancellationToken ct,
-        int? outgoingAfter = null, int? incomingAfterLine = null, int? incomingAfterPosition = null);
-    Task<IReadOnlyList<LineSummary>?> BranchesAsync(int id, CancellationToken ct);
     Task<DialogueValidation?> ValidateAsync(int id, CancellationToken ct);
 }
 
+public sealed record DialogueChange(string Title, int? StartLineId, int? MinimumPlayerLevel, string Version);
+
 public interface ICharacterCatalog
 {
-    Task<IReadOnlyList<CharacterSummary>> ListAsync(CancellationToken ct);
     Task<CatalogPage<CharacterSummary>> PageAsync(string? query, int? before, int? except, CancellationToken ct);
     Task<CharacterSummary?> FindAsync(int id, CancellationToken ct);
     Task<CharacterSummary> CreateAsync(string name, CancellationToken ct);

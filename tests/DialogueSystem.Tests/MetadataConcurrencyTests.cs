@@ -13,7 +13,7 @@ public sealed class MetadataConcurrencyTests
         await using var app = data.Start(settings: [new("DialogueSystem:EditorPassword", password)]);
         using var client = new DialogueApiClient(app);
         await client.Login("editor", password);
-        var before = (await client.Get<DialogueSummary[]>("/api/dialogues"))[0];
+        var before = (await client.GetDialogues("/api/dialogues"))[0];
         var path = $"/api/dialogues/{before.Id}";
         await client.Read<PreviewStep>(HttpMethod.Post, path + "/previews");
         var after = await client.Get<DialogueSummary>(path);
@@ -36,11 +36,11 @@ public sealed class MetadataConcurrencyTests
         using var b = new DialogueApiClient(app);
         await a.Login("editor", password);
         await b.Login("editor", password);
-        var original = (await a.Get<DialogueSummary[]>("/api/dialogues"))[0];
+        var original = (await a.GetDialogues("/api/dialogues"))[0];
         var path = $"/api/dialogues/{original.Id}";
         await a.Expect(NoContent, HttpMethod.Put, path, new { title = "Свежие данные", original.Version });
-        await b.Expect(Conflict, HttpMethod.Put, path + "/minimum-level", new { minimumPlayerLevel = 9, original.Version });
-        await b.Expect(Conflict, HttpMethod.Put, path + "/start", new { lineId = (int?)null, original.Version });
+        await b.Expect(Conflict, HttpMethod.Put, path + "", new { minimumPlayerLevel = 9, original.Version });
+        await b.Expect(Conflict, HttpMethod.Put, path + "", new { startLineId = (int?)null, original.Version });
         using var staleDelete = await b.Send(HttpMethod.Delete, path, includeVersion: false, ifMatch: original.DeleteVersion);
         Assert.Equal(PreconditionFailed, staleDelete.StatusCode);
         var fresh = await b.Get<DialogueSummary>(path);
@@ -49,7 +49,8 @@ public sealed class MetadataConcurrencyTests
         Assert.Equal(original.StartLineId, fresh.StartLineId);
         using var noVersion = await b.Send(HttpMethod.Delete, path, includeVersion: false);
         Assert.Equal(428, (int)noVersion.StatusCode);
-        using var missing = await b.Send(HttpMethod.Put, path, new { title = "Без версии" }, includeVersion: false);
+        using var missing = await b.Send(HttpMethod.Put, path,
+            new { title = "Без версии", fresh.StartLineId, fresh.MinimumPlayerLevel }, includeVersion: false);
         Assert.Equal(428, (int)missing.StatusCode);
         using var wildcard = await b.Send(HttpMethod.Delete, path, includeVersion: false, ifMatch: "*");
         Assert.Equal(BadRequest, wildcard.StatusCode);
@@ -63,9 +64,9 @@ public sealed class MetadataConcurrencyTests
         await using var app = data.Start(settings: [new("DialogueSystem:EditorPassword", password)]);
         using var client = new DialogueApiClient(app);
         await client.Login("editor", password);
-        var dialogue = (await client.Get<DialogueSummary[]>("/api/dialogues"))[0];
+        var dialogue = (await client.GetDialogues("/api/dialogues"))[0];
         var route = $"/api/dialogues/{dialogue.Id}";
-        var speaker = (await client.Get<CharacterSummary[]>("/api/characters"))[0];
+        var speaker = (await client.GetAll<CharacterSummary>("/api/characters"))[0];
         var line = await client.Read<LineSummary>(HttpMethod.Post, route + "/lines", Created,
             new { speakerId = speaker.Id, text = "Черновик" });
         var path = route + $"/lines/{line.Id}";
@@ -100,7 +101,7 @@ public sealed class MetadataConcurrencyTests
         using var staleDelete = await client.Send(HttpMethod.Delete, path, includeVersion: false, ifMatch: source.Version);
         Assert.Equal(PreconditionFailed, staleDelete.StatusCode);
         var fresh = await client.Get<CharacterSummary>(path);
-        var dialogue = (await client.Get<DialogueSummary[]>("/api/dialogues"))[0];
+        var dialogue = (await client.GetDialogues("/api/dialogues"))[0];
         var line = await client.Read<LineSummary>(HttpMethod.Post, $"/api/dialogues/{dialogue.Id}/lines", Created,
             new { speakerId = source.Id, text = "Добавлено другим редактором" });
         using var staleReassign = await client.Send(HttpMethod.Post, path + "/reassign",

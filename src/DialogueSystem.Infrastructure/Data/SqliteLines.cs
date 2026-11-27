@@ -6,6 +6,85 @@ namespace DialogueSystem.Infrastructure.Data;
 
 internal sealed class SqliteLines(DialogueDbContext db) : ILineStore
 {
+    public async Task<LineResource?> ReadLineAsync(int id, int lineId, CancellationToken ct)
+    {
+        var resource = await (from line in db.Lines
+            join dialogue in db.Dialogues on line.DialogueId equals dialogue.Id
+            where dialogue.Id == id && line.Id == lineId
+            select new
+            {
+                Line = new LineSummary(line.Id, line.Speaker.Name, line.Text, line.IsEnding, line.IsStoryBranch, line.SpeakerId),
+                dialogue.Revision
+            }).SingleOrDefaultAsync(ct);
+        return resource is null ? null : new(resource.Line,
+            EditVersions.LineDeletion(lineId, resource.Line.Version, resource.Revision));
+    }
+
+    public Task<LineContext?> ContextAsync(int id, int lineId, CancellationToken ct,
+        int? outgoingAfter = null, int? incomingAfterLine = null, int? incomingAfterPosition = null) =>
+        SqliteReadSnapshot.ReadAsync(db, () => ReadContextAsync(id, lineId, outgoingAfter, incomingAfterLine, incomingAfterPosition, ct), ct);
+
+    private async Task<LineContext?> ReadContextAsync(int id, int lineId, int? outgoingAfter,
+        int? incomingAfterLine, int? incomingAfterPosition, CancellationToken ct)
+    {
+        var dialogue = await CatalogQueries.FindDialogueAsync(db, id, ct);
+        if (dialogue is null) return null;
+        var line = await db.Lines.Where(line => line.DialogueId == id && line.Id == lineId)
+            .Select(line => new LineSummary(line.Id, line.Speaker.Name, line.Text, line.IsEnding, line.IsStoryBranch, line.SpeakerId))
+            .SingleOrDefaultAsync(ct);
+        if (line is null) return null;
+        var neighbors =
+            from choice in db.Choices
+            where choice.DialogueId == id && (choice.SourceLineId == lineId || choice.TargetLineId == lineId)
+            let neighborId = choice.SourceLineId == lineId ? choice.TargetLineId : choice.SourceLineId
+            join neighbor in db.Lines
+                on new { choice.DialogueId, Id = neighborId } equals new { neighbor.DialogueId, neighbor.Id }
+            select new
+            {
+                choice.DialogueId,
+                choice.SourceLineId,
+                choice.TargetLineId,
+                choice.Position,
+                Link = new ChoiceLink(choice.Id, choice.Text, choice.Position,
+                    new LineSummary(neighbor.Id, neighbor.Speaker.Name, neighbor.Text,
+                        neighbor.IsEnding, neighbor.IsStoryBranch, neighbor.SpeakerId),
+                    choice.RequiredState, choice.NextState, choice.TargetLineId)
+            };
+
+        var incoming = await neighbors.Where(choice => choice.TargetLineId == lineId &&
+                (incomingAfterLine == null || choice.SourceLineId > incomingAfterLine ||
+                 choice.SourceLineId == incomingAfterLine && choice.Position > incomingAfterPosition))
+            .OrderBy(choice => choice.SourceLineId).ThenBy(choice => choice.Position)
+            .Select(choice => choice.Link).Take(CatalogLimits.PageSize + 1).ToListAsync(ct);
+        var outgoing = await neighbors.Where(choice => choice.SourceLineId == lineId &&
+                (outgoingAfter == null || choice.Position > outgoingAfter))
+            .OrderBy(choice => choice.Position).Select(choice => choice.Link)
+            .Take(CatalogLimits.PageSize + 1).ToListAsync(ct);
+        var nextIncoming = incoming.Count > CatalogLimits.PageSize
+            ? new IncomingChoiceCursor(incoming[CatalogLimits.PageSize - 1].Line.Id, incoming[CatalogLimits.PageSize - 1].Position) : null;
+        var nextOutgoing = outgoing.Count > CatalogLimits.PageSize ? outgoing[CatalogLimits.PageSize - 1].Position : (int?)null;
+        if (nextIncoming is not null) incoming.RemoveAt(CatalogLimits.PageSize);
+        if (nextOutgoing.HasValue) outgoing.RemoveAt(CatalogLimits.PageSize);
+        var positions = db.Choices.Where(choice => choice.DialogueId == id && choice.SourceLineId == lineId).Select(choice => choice.Position);
+        var maximum = await positions.Select(position => (int?)position).MaxAsync(ct) ?? 0;
+        var suggested = maximum < int.MaxValue ? maximum + 1 : 1;
+        if (maximum == int.MaxValue)
+        {
+            foreach (var used in await positions.Order().ToListAsync(ct))
+            {
+                if (used > suggested) break;
+                if (used == suggested) suggested++;
+            }
+        }
+        return new(line, incoming, outgoing)
+        {
+            Dialogue = dialogue, DeleteVersion = EditVersions.LineDeletion(lineId, line.Version, dialogue.Revision),
+            IncomingCount = await db.Choices.CountAsync(choice => choice.DialogueId == id && choice.TargetLineId == lineId, ct),
+            OutgoingCount = await db.Choices.CountAsync(choice => choice.DialogueId == id && choice.SourceLineId == lineId, ct),
+            NextIncoming = nextIncoming, NextOutgoingPosition = nextOutgoing, SuggestedChoicePosition = suggested
+        };
+    }
+
     public async Task<IStorageTransaction> BeginAsync(CancellationToken ct) =>
         new SqliteTransaction(await db.Database.BeginTransactionAsync(ct));
 
@@ -18,17 +97,8 @@ internal sealed class SqliteLines(DialogueDbContext db) : ILineStore
     public Task<int> CountChoicesAsync(int id, CancellationToken ct) =>
         db.Choices.CountAsync(choice => choice.DialogueId == id, ct);
 
-    public async Task<Dialogue?> FindDialogueAsync(int id, CancellationToken ct) =>
-        await db.Dialogues.FindAsync([id], ct);
-
     public Task<long?> DialogueRevisionAsync(int id, CancellationToken ct) =>
         db.Dialogues.Where(dialogue => dialogue.Id == id).Select(dialogue => (long?)dialogue.Revision).SingleOrDefaultAsync(ct);
-
-    public Task<List<LineSummary>> ListAsync(int id, CancellationToken ct) =>
-        db.Lines.Where(line => line.DialogueId == id).OrderBy(line => line.Id).Take(CatalogLimits.LegacyListSize)
-            .Select(line => new LineSummary(line.Id, line.Speaker.Name, line.Text, line.IsEnding,
-                line.IsStoryBranch, line.SpeakerId))
-            .ToListAsync(ct);
 
     public async Task<CatalogPage<LineReference>?> PageAsync(int id, string? query, int? before, bool branchesOnly, CancellationToken ct)
     {

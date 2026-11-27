@@ -25,10 +25,17 @@ let linesTimer;
 
 const path = () => `/api/dialogues/${state.dialogue.id}`;
 const linePath = () => `${path()}/lines/${state.line.id}`;
+const saveSettings = changes => api(path(), "PUT", {
+  title: state.dialogue.title,
+  startLineId: state.dialogue.startLineId,
+  minimumPlayerLevel: state.dialogue.minimumPlayerLevel,
+  version: state.dialogue.version,
+  ...changes
+});
 const characterLabel = character => `${character.name} · №${character.id}`;
 const speakerPicker = createPagedSelect({
   select: lineForm.elements.speakerId, search: byId("speaker-search"), more: byId("speakers-more"),
-  endpoint: () => "/api/characters/page", itemEndpoint: id => `/api/characters/${id}`, label: characterLabel
+  endpoint: () => "/api/characters", itemEndpoint: id => `/api/characters/${id}`, label: characterLabel
 });
 const dialogueMap = createDialogueMap(() => api(`${path()}/map`), selectLine);
 const refreshRevisions = initializeRevisions(path, () => drafts.confirmDiscard(), () => drafts.reset());
@@ -66,7 +73,7 @@ async function loadDialogue(id, preferredLineId) {
   hideValidation();
   const route = `/api/dialogues/${id}`;
   const [dialogue, lines, branches] = await Promise.all([
-    api(route), api(`${route}/lines/page`), api(`${route}/lines/page?branchesOnly=true`)
+    api(route), api(`${route}/lines`), api(`${route}/lines?branchesOnly=true`)
   ]);
   if (state.dialogue?.id !== dialogue.id) {
     previewForm.reset();
@@ -188,8 +195,8 @@ function choiceForm(choice, position, first = false, last = false) {
   form.querySelector("details").open = Boolean(choice?.requiredState || choice?.nextState);
   createPagedSelect({
     select: fields.targetLineId, search: form.querySelector(".target-search"), more: form.querySelector(".targets-more"),
-    endpoint: () => `${path()}/lines/page`, itemEndpoint: id => `${path()}/lines/${id}/context`,
-    readItem: context => context.line, label: shortLabel, initialPage: state.targetPage,
+    endpoint: () => `${path()}/lines`, itemEndpoint: id => `${path()}/lines/${id}`,
+    label: shortLabel, initialPage: state.targetPage,
     selectedRecord: choice?.line ?? state.targetPage.items[0] ?? state.line
   });
   fields.target.hidden = !choice;
@@ -310,7 +317,7 @@ function resetPreviewHistory() {
 }
 
 async function loadPreviewHistory(preferredId = previewSessions.value) {
-  const page = await api(`${path()}/previews/page`);
+  const page = await api(`${path()}/previews`);
   const sessions = page.items;
   sessionCursor = page.nextBeforeId;
   byId("preview-sessions-more").hidden = sessionCursor == null;
@@ -406,7 +413,7 @@ function renderStep(step) {
 
 renameDialogueForm.onsubmit = run(async () => {
   if (!drafts.confirmDiscard(renameDialogueForm)) return;
-  await api(path(), "PUT", { title: renameDialogueForm.elements.title.value, version: state.dialogue.version });
+  await saveSettings({ title: renameDialogueForm.elements.title.value });
   await loadDialogue(state.dialogue.id, state.line?.id);
   byId("status").textContent = `Диалог переименован в «${state.dialogue.title}».`;
 });
@@ -445,7 +452,7 @@ async function loadLines(before) {
   const request = ++linesGeneration;
   const query = new URLSearchParams({ q: byId("line-search").value.trim() });
   if (before != null) query.set("before", before);
-  const page = await api(`${path()}/lines/page?${query}`);
+  const page = await api(`${path()}/lines?${query}`);
   if (request !== linesGeneration) return;
   state.lines = before == null ? page.items : [...state.lines, ...page.items];
   linesCursor = page.nextBeforeId;
@@ -460,7 +467,7 @@ byId("line-search").oninput = () => {
 byId("lines-more").onclick = run(() => loadLines(linesCursor));
 byId("branches-more").onclick = run(async () => {
   if (branchesCursor == null) return;
-  const page = await api(`${path()}/lines/page?branchesOnly=true&before=${branchesCursor}`);
+  const page = await api(`${path()}/lines?branchesOnly=true&before=${branchesCursor}`);
   state.branches.push(...page.items);
   branchesCursor = page.nextBeforeId;
   listLinks("branches", state.branches, "Сюжетные развилки не отмечены.");
@@ -480,12 +487,12 @@ lineForm.onsubmit = run(async () => {
 });
 byId("set-start").onclick = run(async () => {
   if (!drafts.confirmDiscard()) return;
-  await api(`${path()}/start`, "PUT", { lineId: state.line.id, version: state.dialogue.version });
+  await saveSettings({ startLineId: state.line.id });
   await loadDialogue(state.dialogue.id, state.line.id);
 });
 byId("clear-start").onclick = run(async () => {
   if (!drafts.confirmDiscard()) return;
-  await api(`${path()}/start`, "PUT", { lineId: null, version: state.dialogue.version });
+  await saveSettings({ startLineId: null });
   await loadDialogue(state.dialogue.id, state.line.id);
 });
 byId("delete-line").onclick = run(async () => {
@@ -499,7 +506,7 @@ minimumLevelForm.onsubmit = run(async () => {
   if (!drafts.confirmDiscard(minimumLevelForm)) return;
   const field = minimumLevelForm.elements.minimumPlayerLevel;
   const minimum = field.value === "" ? null : field.valueAsNumber;
-  await api(`${path()}/minimum-level`, "PUT", { minimumPlayerLevel: minimum, version: state.dialogue.version });
+  await saveSettings({ minimumPlayerLevel: minimum });
   await loadDialogue(state.dialogue.id, state.line?.id);
   byId("status").textContent = minimum == null ? "Ограничение по уровню снято." : "Минимальный уровень сохранён.";
 });
@@ -537,7 +544,7 @@ previewSessions.onchange = run(() => showPreviewHistory(previewSessions.value));
 byId("preview-sessions-more").onclick = run(async () => {
   if (!sessionCursor) return;
   let page;
-  try { page = await api(`${path()}/previews/page?before=${sessionCursor}`); }
+  try { page = await api(`${path()}/previews?before=${sessionCursor}`); }
   catch (error) {
     if (error.status !== 404) throw error;
     await loadPreviewHistory(null);

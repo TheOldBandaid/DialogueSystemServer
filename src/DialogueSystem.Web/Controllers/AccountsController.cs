@@ -55,11 +55,6 @@ public sealed class AccountsController(AccountService accounts, LoginProtection 
 
     [HttpGet]
     [Authorize(Roles = AccountRoles.Administrator)]
-    public Task<IReadOnlyList<AccountSummary>> List(CancellationToken cancellationToken) =>
-        accounts.ListAsync(cancellationToken);
-
-    [HttpGet("page")]
-    [Authorize(Roles = AccountRoles.Administrator)]
     public Task<CatalogPage<AccountSummary>> Page([FromQuery, StringLength(CatalogLimits.SearchLength)] string? q,
         [FromQuery, Range(1, int.MaxValue)] int? before, CancellationToken ct) => accounts.PageAsync(q, before, ct);
 

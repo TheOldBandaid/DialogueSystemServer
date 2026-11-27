@@ -12,12 +12,12 @@ const characterLabel = character => `${character.name} · №${character.id}`;
 let selected;
 const sourcePicker = createPagedSelect({
   select: byId("character-picker"), search: byId("character-search"), more: byId("characters-more"),
-  endpoint: () => `${endpoint}/page`, itemEndpoint: id => `${endpoint}/${id}`, label: characterLabel,
+  endpoint: () => `${endpoint}`, itemEndpoint: id => `${endpoint}/${id}`, label: characterLabel,
   onChange: character => character ? openCharacter(character.id) : null
 });
 const targetPicker = createPagedSelect({
   select: reassign.elements.targetCharacterId, search: byId("reassign-search"), more: byId("reassign-more"),
-  endpoint: () => `${endpoint}/page`, itemEndpoint: id => `${endpoint}/${id}`, label: characterLabel,
+  endpoint: () => `${endpoint}`, itemEndpoint: id => `${endpoint}/${id}`, label: characterLabel,
   except: () => selected?.id
 });
 

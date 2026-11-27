@@ -22,7 +22,7 @@ public sealed class AccountRecoveryTests
         using var editor = new DialogueApiClient(app);
         await admin.Login("admin", adminPassword);
         await oldSession.Login("editor", oldPassword);
-        var users = await admin.Get<AccountSummary[]>("/api/accounts");
+        var users = await admin.GetAll<AccountSummary>("/api/accounts");
         var target = Assert.Single(users, user => user.Login == "editor");
         var route = $"/api/accounts/{target.Id}/password";
         var input = new { currentPassword = adminPassword, temporaryPassword = temporary };

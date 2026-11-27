@@ -27,7 +27,7 @@ test("paged selectors keep an off-page selection and ignore late or detached res
     const select = host.querySelector("select");
     const search = host.querySelector("input");
     const more = host.querySelector("button");
-    const picker = createPagedSelect({ select, search, more, endpoint: () => "/items/page", itemEndpoint: id => `/items/${id}`, label: item => item.name });
+    const picker = createPagedSelect({ select, search, more, endpoint: () => "/items", itemEndpoint: id => `/items/${id}`, label: item => item.name });
     await picker.refresh(99);
     assert.equal(select.value, "99");
     assert.equal(select.options.length, 3);
@@ -49,7 +49,7 @@ test("paged selectors keep an off-page selection and ignore late or detached res
     await a;
     assert.deepEqual([...select.options].map(option => option.value), ["99", "8"]);
 
-    globalThis.fetch = async path => path.startsWith("/items/page")
+    globalThis.fetch = async path => (path === "/items" || path.startsWith("/items?"))
       ? Response.json({ items: [{ id: 8, name: "Существующий" }], nextBeforeId: null })
       : Response.json({ detail: "Удалено" }, { status: 404 });
     assert.equal((await picker.refresh(99)).id, 8);
@@ -62,7 +62,7 @@ test("paged selectors keep an off-page selection and ignore late or detached res
     let itemRequested;
     const requested = new Promise(resolve => { itemRequested = resolve; });
     globalThis.fetch = async path => {
-      if (path.startsWith("/items/page")) return Response.json({ items: [{ id: 8, name: "Существующий" }], nextBeforeId: null });
+      if (path === "/items" || path.startsWith("/items?")) return Response.json({ items: [{ id: 8, name: "Существующий" }], nextBeforeId: null });
       if (path === "/items/101") { itemRequested(); return oldItem.promise; }
       return Response.json({ id: 102, name: "Новый выбор" });
     };
@@ -74,7 +74,7 @@ test("paged selectors keep an off-page selection and ignore late or detached res
     assert.equal(select.value, "102");
     assert.equal([...select.options].some(option => option.value === "101"), false);
 
-    globalThis.fetch = async path => path.startsWith("/items/page")
+    globalThis.fetch = async path => (path === "/items" || path.startsWith("/items?"))
       ? Response.json({ items: [], nextBeforeId: null })
       : Response.json({ detail: "Удалено" }, { status: 404 });
     assert.equal(await picker.refresh(102), null);

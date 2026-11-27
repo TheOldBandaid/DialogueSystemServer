@@ -1,7 +1,7 @@
 import { api, run } from "./workspace.js";
 
 export function createPagedSelect({ select, search, more, endpoint, itemEndpoint, label,
-  except = () => null, initialPage, selectedRecord, onChange, readItem = value => value }) {
+  except = () => null, initialPage, selectedRecord, onChange }) {
   const records = new Map();
   const loaded = new Set();
   let cursor = null;
@@ -53,7 +53,7 @@ export function createPagedSelect({ select, search, more, endpoint, itemEndpoint
     if (wantedId != null && wantedId > 0) {
       let record = records.get(wantedId);
       if (!record || !loaded.has(wantedId)) {
-        try { record = readItem(await api(itemEndpoint(wantedId))); }
+        try { record = await api(itemEndpoint(wantedId)); }
         catch (error) {
           if (error.status !== 404) throw error;
           record = null;

@@ -26,7 +26,7 @@ public sealed class DialogueRevisionTests
         using (var guest = new DialogueApiClient(app))
         {
             await editor.Login("editor", password);
-            var dialogues = await editor.Get<DialogueSummary[]>(Dialogues);
+            var dialogues = await editor.GetDialogues(Dialogues);
             var sample = Assert.Single(dialogues, item => item.Title == "Кино после патруля");
             var other = Assert.Single(dialogues, item => item.Id != sample.Id);
             source = $"{Dialogues}/{sample.Id}";
@@ -37,7 +37,7 @@ public sealed class DialogueRevisionTests
             await editor.Expect(BadRequest, HttpMethod.Post, revisions, input, includeToken: false);
             await editor.Expect(BadRequest, HttpMethod.Post, revisions, new { label = " " });
             Assert.Empty((await editor.Get<DialogueRevisionPage>(revisions)).Items);
-            await editor.Expect(NoContent, HttpMethod.Put, source + "/minimum-level", new { minimumPlayerLevel = 4 });
+            await editor.Expect(NoContent, HttpMethod.Put, source + "", new { minimumPlayerLevel = 4 });
             snapshot = await editor.Get<DialogueDocument>(source + "/export");
             var preview = await editor.Read<PreviewStep>(
                 HttpMethod.Post, source + "/previews", payload: new { playerLevel = 4 });
@@ -54,7 +54,7 @@ public sealed class DialogueRevisionTests
             await editor.Expect(NotFound, HttpMethod.Post, otherRevision + "/copy");
 
             await editor.Expect(NoContent, HttpMethod.Put, source, new { title = "Текущая редакция" });
-            await editor.Expect(NoContent, HttpMethod.Put, source + "/minimum-level", new { minimumPlayerLevel = 2 });
+            await editor.Expect(NoContent, HttpMethod.Put, source + "", new { minimumPlayerLevel = 2 });
             await editor.Expect(NoContent, HttpMethod.Put, $"{source}/lines/{preview.Line.Id}",
                 new { speakerId = preview.Line.SpeakerId, text = "Обновлённая стартовая реплика", isStoryBranch = true });
         }

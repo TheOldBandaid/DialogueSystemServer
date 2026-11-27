@@ -61,7 +61,8 @@ internal sealed class SqliteCleanup(DialogueDbContext db, DatabaseBackups backup
                 .Take(criteria.KeepLatest).Select(preview => preview.Id);
             previews = await scope.Where(preview => preview.StartedAtUnixMilliseconds != null &&
                     preview.StartedAtUnixMilliseconds < criteria.BeforeUnixMilliseconds && !protectedIds.Contains(preview.Id) &&
-                    preview.History.Any(entry => entry.Step == preview.Step && entry.IsEnding))
+                    (preview.History.Any(entry => entry.Step == preview.Step && entry.IsEnding) ||
+                     criteria.IncludeInterruptedPreviews && !db.Lines.Any(line => line.DialogueId == preview.DialogueId && line.Id == preview.CurrentLineId)))
                 .OrderBy(preview => preview.StartedAtUnixMilliseconds).ThenBy(preview => preview.Id)
                 .Select(preview => new PreviewCandidate(preview.Id, preview.Step, preview.History.LongCount()))
                 .Take(BatchSize + 1).ToListAsync(ct);

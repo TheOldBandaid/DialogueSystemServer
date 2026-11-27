@@ -30,4 +30,15 @@ internal static class VersionPreconditions
             { StatusCode = conditional ? StatusCodes.Status412PreconditionFailed : StatusCodes.Status409Conflict },
         _ => throw new InvalidOperationException()
     };
+
+    public static ActionResult Result(EditResult result) => result.Status switch
+    {
+        EditStatus.Saved => new NoContentResult(),
+        EditStatus.NotFound => new NotFoundResult(),
+        EditStatus.Invalid => new BadRequestObjectResult(new ProblemDetails { Detail = result.Detail }),
+        EditStatus.Conflict => new ConflictObjectResult(new ProblemDetails { Detail = result.Detail }),
+        EditStatus.StaleVersion => new ObjectResult(new ProblemDetails { Detail = result.Detail })
+            { StatusCode = StatusCodes.Status412PreconditionFailed },
+        _ => throw new InvalidOperationException()
+    };
 }

@@ -4,7 +4,6 @@ namespace DialogueSystem.Application;
 
 public interface IPreviewStore
 {
-    Task<IReadOnlyList<PreviewSessionSummary>> ListAsync(int dialogueId, int userId, CancellationToken ct);
     Task<PreviewSessionPage?> ListPageAsync(int dialogueId, int userId, Guid? before, CancellationToken ct);
     Task<PreviewHistory?> HistoryAsync(int dialogueId, int userId, Guid previewId, CancellationToken ct, int after = -1);
     Task<DialoguePreview?> FindAsync(int dialogueId, int userId, Guid previewId, CancellationToken ct);
@@ -23,9 +22,6 @@ public sealed record PreviewResult(PreviewStatus Status, PreviewStep? Step = nul
 
 public sealed class PreviewService(IPreviewStore store)
 {
-    public Task<IReadOnlyList<PreviewSessionSummary>> ListAsync(int dialogueId, int userId, CancellationToken ct) =>
-        store.ListAsync(dialogueId, userId, ct);
-
     public Task<PreviewSessionPage?> ListPageAsync(int dialogueId, int userId, Guid? before, CancellationToken ct) =>
         store.ListPageAsync(dialogueId, userId, before, ct);
 

@@ -6,13 +6,6 @@ namespace DialogueSystem.Infrastructure.Data;
 
 internal sealed class SqlitePreviews(DialogueDbContext db, GraphSnapshots cache) : IPreviewStore
 {
-    public async Task<IReadOnlyList<PreviewSessionSummary>> ListAsync(int dialogueId, int userId, CancellationToken ct) =>
-        await Owned(dialogueId, userId)
-            .OrderByDescending(preview => preview.StartedAtUnixMilliseconds).ThenByDescending(preview => preview.Id)
-            .Take(20)
-            .Select(preview => new PreviewSessionSummary(preview.Id, preview.Step, preview.StartedAtUnixMilliseconds))
-            .ToListAsync(ct);
-
     public async Task<PreviewSessionPage?> ListPageAsync(int dialogueId, int userId, Guid? before, CancellationToken ct)
     {
         var selected = Owned(dialogueId, userId);

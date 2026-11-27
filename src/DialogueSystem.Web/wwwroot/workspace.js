@@ -155,7 +155,7 @@ async function loadAccounts(before) {
   const text = byId("accounts-search")?.value.trim();
   if (text) query.set("q", text);
   if (before != null) query.set("before", before);
-  const page = await accountRequest(`/api/accounts/page?${query}`);
+  const page = await accountRequest(`/api/accounts?${query}`);
   if (generation !== accountsGeneration || accountAdmin.hidden) return;
   const rows = page.items.map(accountRow);
   if (before == null) byId("accounts-list").replaceChildren(...rows);

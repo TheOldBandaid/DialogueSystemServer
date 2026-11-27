@@ -19,9 +19,6 @@ public sealed class DialogueGraph(Dialogue dialogue, IReadOnlyList<DialogueChoic
         choices.OrderBy(choice => choice.SourceLineId).ThenBy(choice => choice.Position)
             .ToLookup(choice => choice.TargetLineId);
 
-    public IReadOnlyList<LineSummary> GetStoryBranches() =>
-        _lines.Values.Where(line => line.IsStoryBranch).OrderBy(line => line.Id).Select(Summarize).ToArray();
-
     public DialogueDocument ToDocument() => new(
         2, dialogue.Title, dialogue.StartLineId,
         _lines.Values.OrderBy(line => line.Id)

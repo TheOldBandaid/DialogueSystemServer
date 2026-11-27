@@ -14,14 +14,6 @@ namespace DialogueSystem.Web.Controllers;
 public sealed class DialoguesController(IDialogueCatalog catalog) : ControllerBase
 {
     [HttpGet]
-    public Task<IReadOnlyList<DialogueSummary>> List(CancellationToken cancellationToken) =>
-        catalog.ListAsync(cancellationToken);
-
-    [HttpGet("overview")]
-    public Task<IReadOnlyList<DialogueOverview>> Overview(CancellationToken cancellationToken) =>
-        catalog.OverviewAsync(cancellationToken);
-
-    [HttpGet("page")]
     public Task<CatalogPage<DialogueOverview>> Page([FromQuery, StringLength(CatalogLimits.SearchLength)] string? q,
         [FromQuery] bool? hasStart, [FromQuery, Range(1, int.MaxValue)] int? before, CancellationToken ct) =>
         catalog.PageAsync(q, hasStart, before, ct);
@@ -45,9 +37,10 @@ public sealed class DialoguesController(IDialogueCatalog catalog) : ControllerBa
 
     [HttpPut("{id:int}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
-    public async Task<IActionResult> Update(int id, DialogueInput input, CancellationToken cancellationToken) =>
+    public async Task<IActionResult> Update(int id, DialogueSettingsInput input, CancellationToken cancellationToken) =>
         input.Version is null ? VersionPreconditions.Missing() :
-            VersionPreconditions.Result(await catalog.RenameAsync(id, input.Title, input.Version, cancellationToken));
+            VersionPreconditions.Result(await catalog.UpdateAsync(id,
+                new(input.Title, input.StartLineId, input.MinimumPlayerLevel, input.Version), cancellationToken));
 
     [HttpDelete("{id:int}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
@@ -56,12 +49,6 @@ public sealed class DialoguesController(IDialogueCatalog catalog) : ControllerBa
         var error = VersionPreconditions.Header(version, out var expected);
         return error ?? VersionPreconditions.Result(await catalog.DeleteAsync(id, expected, cancellationToken), conditional: true);
     }
-
-    [HttpPut("{id:int}/minimum-level")]
-    [ProducesResponseType(StatusCodes.Status204NoContent)]
-    public async Task<IActionResult> SetMinimumLevel(int id, MinimumLevelInput input, CancellationToken cancellationToken) =>
-        input.Version is null ? VersionPreconditions.Missing() :
-            VersionPreconditions.Result(await catalog.SetMinimumLevelAsync(id, input.MinimumPlayerLevel, input.Version, cancellationToken));
 
     [HttpGet("{id:int}/export")]
     public async Task<ActionResult<DialogueDocument>> Export(int id, CancellationToken cancellationToken)
@@ -88,31 +75,6 @@ public sealed class DialoguesController(IDialogueCatalog catalog) : ControllerBa
         return CreatedAtAction(nameof(Get), new { id = created.Id }, created);
     }
 
-    [HttpGet("{id:int}/lines/{lineId:int}/context")]
-    public async Task<ActionResult<LineContext>> Context(int id, int lineId, CancellationToken cancellationToken,
-        [FromQuery, Range(1, int.MaxValue)] int? outgoingAfter = null,
-        [FromQuery, Range(1, int.MaxValue)] int? incomingAfterLine = null,
-        [FromQuery, Range(1, int.MaxValue)] int? incomingAfterPosition = null,
-        [FromQuery, StringLength(64, MinimumLength = 64)] string? version = null)
-    {
-        if (incomingAfterLine.HasValue != incomingAfterPosition.HasValue)
-            return BadRequest(new ProblemDetails { Detail = "Передайте оба поля входящего курсора." });
-        if ((outgoingAfter.HasValue || incomingAfterLine.HasValue) && version is null) return VersionPreconditions.Missing();
-        var context = await catalog.ContextAsync(id, lineId, cancellationToken, outgoingAfter, incomingAfterLine, incomingAfterPosition);
-        if (context is not null && version is not null && context.Dialogue!.Version != version)
-            return Conflict(new ProblemDetails { Detail = "Связи диалога изменились. Обновите реплику перед загрузкой следующей страницы." });
-        return context is null ? NotFound() : Ok(context);
-    }
-
-    [HttpGet("{id:int}/lines/{lineId:int}")]
-    public async Task<ActionResult<LineSummary>> GetLine(int id, int lineId, CancellationToken ct)
-    {
-        var resource = await catalog.FindLineAsync(id, lineId, ct);
-        if (resource is null) return NotFound();
-        Response.Headers.ETag = $"\"{resource.DeleteVersion}\"";
-        return Ok(resource.Line);
-    }
-
     [HttpPost("{id:int}/copy")]
     [ProducesResponseType(StatusCodes.Status201Created)]
     public async Task<ActionResult<DialogueSummary>> Copy(int id,
@@ -122,13 +84,6 @@ public sealed class DialoguesController(IDialogueCatalog catalog) : ControllerBa
         return copy is null ? NotFound() : CreatedAtAction(nameof(Get), new { id = copy.Id }, copy);
     }
 
-    [HttpGet("{id:int}/story-branches")]
-    public async Task<ActionResult<IReadOnlyList<LineSummary>>> Branches(int id, CancellationToken cancellationToken)
-    {
-        var branches = await catalog.BranchesAsync(id, cancellationToken);
-        return branches is null ? NotFound() : Ok(branches);
-    }
-
     [HttpGet("{id:int}/validation")]
     public async Task<ActionResult<DialogueValidation>> Validation(int id, CancellationToken cancellationToken)
     {
@@ -136,7 +91,9 @@ public sealed class DialoguesController(IDialogueCatalog catalog) : ControllerBa
         return validation is null ? NotFound() : Ok(validation);
     }
 
-    public sealed record DialogueInput([Required, StringLength(160)] string Title, [StringLength(64, MinimumLength = 64)] string? Version = null);
-    public sealed record MinimumLevelInput([property: JsonRequired] [Range(1, int.MaxValue)] int? MinimumPlayerLevel,
+    public sealed record DialogueInput([Required, StringLength(160)] string Title);
+    public sealed record DialogueSettingsInput([Required, StringLength(160)] string Title,
+        [property: JsonRequired] [Range(1, int.MaxValue)] int? StartLineId,
+        [property: JsonRequired] [Range(1, int.MaxValue)] int? MinimumPlayerLevel,
         [StringLength(64, MinimumLength = 64)] string? Version = null);
 }

@@ -40,7 +40,7 @@ public sealed class PreviewHistoryTests
             await editor.Expect(NoContent, HttpMethod.Delete, $"{route}/lines/{first.Line.Id}/choices/{first.Choices[0].Id}");
             await editor.Expect(NoContent, HttpMethod.Delete, $"{route}/lines/{current.Line.Id}");
             Assert.Equal(saved.Steps.ToArray(), (await editor.Get<PreviewHistory>(historyRoute)).Steps.ToArray());
-            Assert.Single(await editor.Get<PreviewSessionSummary[]>(route + "/previews"));
+            Assert.Single(await editor.GetPreviews(route + "/previews"));
             await editor.Expect(Conflict, HttpMethod.Post, $"{route}/previews/{first.PreviewId}/choices",
                 new SelectChoice(first.Choices[0].Id, current.Step));
         }
@@ -71,11 +71,11 @@ public sealed class PreviewHistoryTests
         {
             await editor.Login("editor", editorPassword);
             await admin.Login("admin", adminPassword);
-            var dialogue = Assert.Single(await editor.Get<DialogueSummary[]>(Dialogues),
+            var dialogue = Assert.Single(await editor.GetDialogues(Dialogues),
                 item => item.Title == "Ключ от архива");
             var path = $"{Dialogues}/{dialogue.Id}";
             previews = $"{path}/previews";
-            Assert.Empty(await editor.Get<PreviewSessionSummary[]>(previews));
+            Assert.Empty(await editor.GetPreviews(previews));
 
             var start = await editor.Read<PreviewStep>(HttpMethod.Post, previews);
             historyPath = $"{previews}/{start.PreviewId}/history";
@@ -95,7 +95,7 @@ public sealed class PreviewHistoryTests
             Assert.Equal(next.Line.Text, savedHistory.Steps[1].Text);
 
             await guest.Expect(Unauthorized, HttpMethod.Get, historyPath);
-            Assert.Empty(await admin.Get<PreviewSessionSummary[]>(previews));
+            Assert.Empty(await admin.GetPreviews(previews));
             await admin.Expect(NotFound, HttpMethod.Get, historyPath);
             await editor.Expect(NotFound, HttpMethod.Get, $"{Dialogues}/0/previews/{start.PreviewId}/history");
 
@@ -109,7 +109,7 @@ public sealed class PreviewHistoryTests
         using (var editor = new DialogueApiClient(app))
         {
             await editor.Login("editor", editorPassword);
-            var session = Assert.Single(await editor.Get<PreviewSessionSummary[]>(previews));
+            var session = Assert.Single(await editor.GetPreviews(previews));
             Assert.Equal(savedHistory.PreviewId, session.PreviewId);
             Assert.Equal(1, session.Step);
             Assert.NotNull(session.StartedAtUnixMilliseconds);
@@ -160,7 +160,7 @@ public sealed class PreviewHistoryTests
         using var editor = new DialogueApiClient(app);
         await editor.Login("editor", editorPassword);
         var previews = $"{Dialogues}/{dialogue.Id}/previews";
-        var session = Assert.Single(await editor.Get<PreviewSessionSummary[]>(previews));
+        var session = Assert.Single(await editor.GetPreviews(previews));
         Assert.Null(session.StartedAtUnixMilliseconds);
         Assert.Empty((await editor.Get<PreviewHistory>($"{previews}/{previewId}/history")).Steps);
 

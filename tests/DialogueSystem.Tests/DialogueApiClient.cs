@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using DialogueSystem.Application;
 using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace DialogueSystem.Tests;
@@ -20,6 +21,47 @@ internal sealed class DialogueApiClient(WebApplicationFactory<Program> app) : ID
     }
 
     public Task<T> Get<T>(string path) => Read<T>(HttpMethod.Get, path);
+
+    public async Task<T[]> GetAll<T>(string path)
+    {
+        var items = new List<T>();
+        int? before = null;
+        do
+        {
+            var route = before is null ? path : $"{path}{(path.Contains('?') ? '&' : '?')}before={before}";
+            var page = await Get<CatalogPage<T>>(route);
+            items.AddRange(page.Items);
+            before = page.NextBeforeId;
+        } while (before is not null);
+        return items.ToArray();
+    }
+
+    public async Task<DialogueSummary[]> GetDialogues(string path)
+    {
+        var items = await GetAll<DialogueOverview>(path);
+        return await Task.WhenAll(items.Select(item => Get<DialogueSummary>($"/api/dialogues/{item.Id}")));
+    }
+
+    public async Task<LineSummary[]> GetLines(string path)
+    {
+        var items = await GetAll<LineReference>(path);
+        var route = path.Split('?')[0];
+        return await Task.WhenAll(items.Select(item => Get<LineSummary>($"{route}/{item.Id}")));
+    }
+
+    public async Task<PreviewSessionSummary[]> GetPreviews(string path)
+    {
+        var items = new List<PreviewSessionSummary>();
+        Guid? before = null;
+        do
+        {
+            var route = before is null ? path : $"{path}?before={before}";
+            var page = await Get<PreviewSessionPage>(route);
+            items.AddRange(page.Items);
+            before = page.NextBeforeId;
+        } while (before is not null);
+        return items.ToArray();
+    }
 
     public async Task<T> Read<T>(
         HttpMethod method, string path, HttpStatusCode expected = HttpStatusCode.OK, object? payload = null)
@@ -44,6 +86,15 @@ internal sealed class DialogueApiClient(WebApplicationFactory<Program> app) : ID
         if (includeVersion)
         {
             var parts = path.Split('?')[0].Trim('/').Split('/');
+            if (method == HttpMethod.Put && parts.Length == 3 && parts[1] == "dialogues" && body is JsonObject settings &&
+                new[] { "title", "startLineId", "minimumPlayerLevel" }.Any(field => !settings.ContainsKey(field)))
+            {
+                using var reply = await client.GetAsync(path);
+                var current = reply.IsSuccessStatusCode ? await reply.Content.ReadFromJsonAsync<JsonObject>() : null;
+                foreach (var field in new[] { "title", "startLineId", "minimumPlayerLevel" })
+                    if (!settings.ContainsKey(field)) settings[field] = current?[field]?.DeepClone();
+                if (!settings.ContainsKey("version")) settings["version"] = current?["version"]?.DeepClone() ?? JsonValue.Create(new string('0', 64));
+            }
             if (method == HttpMethod.Put && parts.Length == 4 && parts[1] == "accounts" && parts[3] == "role" && body is JsonObject role && !role.ContainsKey("version"))
             {
                 using var target = await client.GetAsync($"/api/accounts/{parts[2]}");
@@ -52,7 +103,7 @@ internal sealed class DialogueApiClient(WebApplicationFactory<Program> app) : ID
             }
             var line = parts.Length >= 5 && parts[0] == "api" && parts[1] == "dialogues" && parts[3] == "lines";
             var metadata = parts.Length >= 3 && parts[0] == "api" &&
-                (parts[1] == "dialogues" && (parts.Length == 3 || parts.Length == 4 && parts[3] is "start" or "minimum-level") ||
+                (parts[1] == "dialogues" && parts.Length == 3 ||
                  parts[1] == "characters" && (parts.Length == 3 || parts.Length == 4 && parts[3] == "reassign"));
             if ((method == HttpMethod.Put || method == HttpMethod.Delete || method == HttpMethod.Post && parts.LastOrDefault() == "reassign") &&
                 (line || metadata))

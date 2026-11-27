@@ -32,7 +32,7 @@ public sealed class AccountsApiTests
         await editor.Login("editor", editorPassword);
         await admin.Login("admin", adminPassword);
 
-        var users = await admin.Get<AccountSummary[]>(accounts);
+        var users = await admin.GetAll<AccountSummary>(accounts);
         var editorId = Assert.Single(users, user => user.Login == "editor").Id;
         var adminId = Assert.Single(users, user => user.Login == "admin").Id;
         var editorRole = $"{accounts}/{editorId}/role";
@@ -82,7 +82,7 @@ public sealed class AccountsApiTests
 
             using var admin = new DialogueApiClient(app);
             await admin.Login("admin", password);
-            Assert.Single(await admin.Get<AccountSummary[]>("/api/accounts"));
+            Assert.Single(await admin.GetAll<AccountSummary>("/api/accounts"));
             Assert.Equal(0, (await db.Accounts.SingleAsync()).SessionVersion);
         }
 

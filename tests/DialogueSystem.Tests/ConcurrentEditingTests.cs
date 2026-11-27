@@ -15,7 +15,7 @@ public sealed class ConcurrentEditingTests
         using var b = new DialogueApiClient(app);
         await a.Login("editor", password);
         await b.Login("editor", password);
-        var dialogue = (await a.Get<DialogueSummary[]>("/api/dialogues"))[0];
+        var dialogue = (await a.GetDialogues("/api/dialogues"))[0];
         var path = $"/api/dialogues/{dialogue.Id}/lines/{dialogue.StartLineId}";
         var original = await a.Get<LineContext>(path + "/context");
         var line = original.Line;
@@ -52,7 +52,7 @@ public sealed class ConcurrentEditingTests
         using var b = new DialogueApiClient(app);
         await a.Login("editor", password);
         await b.Login("editor", password);
-        var dialogue = (await a.Get<DialogueSummary[]>("/api/dialogues"))[0];
+        var dialogue = (await a.GetDialogues("/api/dialogues"))[0];
         var path = $"/api/dialogues/{dialogue.Id}/lines/{dialogue.StartLineId}";
         var line = (await a.Get<LineContext>(path + "/context")).Line;
         var replies = await Task.WhenAll(

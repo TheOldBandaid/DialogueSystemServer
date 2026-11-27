@@ -13,13 +13,14 @@ public sealed record EditResult(EditStatus Status, string? Detail = null,
 
 public interface ILineStore
 {
+    Task<LineResource?> ReadLineAsync(int id, int lineId, CancellationToken ct);
+    Task<LineContext?> ContextAsync(int id, int lineId, CancellationToken ct,
+        int? outgoingAfter = null, int? incomingAfterLine = null, int? incomingAfterPosition = null);
     Task<IStorageTransaction> BeginAsync(CancellationToken ct);
     Task<bool> DialogueExistsAsync(int id, CancellationToken ct);
     Task<int> CountLinesAsync(int id, CancellationToken ct);
     Task<int> CountChoicesAsync(int id, CancellationToken ct);
-    Task<Dialogue?> FindDialogueAsync(int id, CancellationToken ct);
     Task<long?> DialogueRevisionAsync(int id, CancellationToken ct);
-    Task<List<LineSummary>> ListAsync(int id, CancellationToken ct);
     Task<CatalogPage<LineReference>?> PageAsync(int id, string? query, int? before, bool branchesOnly, CancellationToken ct);
     Task<DialogueLine?> FindLineAsync(int id, int lineId, CancellationToken ct);
     Task<bool> LineExistsAsync(int id, int lineId, CancellationToken ct);
@@ -41,8 +42,12 @@ public interface ILineStore
 
 public sealed class LineEditor(ILineStore store)
 {
-    public async Task<List<LineSummary>?> ListAsync(int id, CancellationToken ct) =>
-        await store.DialogueExistsAsync(id, ct) ? await store.ListAsync(id, ct) : null;
+    public Task<LineResource?> ReadAsync(int id, int lineId, CancellationToken ct) =>
+        store.ReadLineAsync(id, lineId, ct);
+
+    public Task<LineContext?> ContextAsync(int id, int lineId, CancellationToken ct,
+        int? outgoingAfter = null, int? incomingAfterLine = null, int? incomingAfterPosition = null) =>
+        store.ContextAsync(id, lineId, ct, outgoingAfter, incomingAfterLine, incomingAfterPosition);
 
     public Task<CatalogPage<LineReference>?> PageAsync(int id, string? query, int? before, bool branchesOnly, CancellationToken ct) =>
         store.PageAsync(id, query, before, branchesOnly, ct);
@@ -98,23 +103,6 @@ public sealed class LineEditor(ILineStore store)
         line.Text = input.Text.Trim();
         line.IsEnding = input.IsEnding;
         line.IsStoryBranch = input.IsStoryBranch;
-        await store.SaveAsync(ct);
-        await transaction.CommitAsync(ct);
-        return new(EditStatus.Saved);
-    }
-
-    public async Task<EditResult> SetStartAsync(int id, int? lineId, string version, CancellationToken ct)
-    {
-        await using var transaction = await store.BeginAsync(ct);
-        var dialogue = await store.FindDialogueAsync(id, ct);
-        if (dialogue is null)
-            return new(EditStatus.NotFound);
-        if (version != EditVersions.Dialogue(id, dialogue.Revision))
-            return new(EditStatus.Conflict, "Диалог уже изменился. Обновите его перед назначением старта.");
-        if (lineId is int start && !await store.LineExistsAsync(id, start, ct))
-            return new(EditStatus.Invalid, "Стартовая реплика должна принадлежать этому диалогу.");
-
-        dialogue.StartLineId = lineId;
         await store.SaveAsync(ct);
         await transaction.CommitAsync(ct);
         return new(EditStatus.Saved);

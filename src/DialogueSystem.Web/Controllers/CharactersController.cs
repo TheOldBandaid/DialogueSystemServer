@@ -12,10 +12,6 @@ namespace DialogueSystem.Web.Controllers;
 public sealed class CharactersController(ICharacterCatalog catalog) : ControllerBase
 {
     [HttpGet]
-    public Task<IReadOnlyList<CharacterSummary>> List(CancellationToken cancellationToken) =>
-        catalog.ListAsync(cancellationToken);
-
-    [HttpGet("page")]
     public Task<CatalogPage<CharacterSummary>> Page([FromQuery, StringLength(CatalogLimits.SearchLength)] string? q,
         [FromQuery, Range(1, int.MaxValue)] int? before, [FromQuery, Range(1, int.MaxValue)] int? except, CancellationToken ct) =>
         catalog.PageAsync(q, before, except, ct);

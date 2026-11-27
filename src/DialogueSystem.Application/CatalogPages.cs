@@ -3,7 +3,6 @@ namespace DialogueSystem.Application;
 public static class CatalogLimits
 {
     public const int PageSize = 20;
-    public const int LegacyListSize = 100;
     public const int SearchLength = 160;
 }
 

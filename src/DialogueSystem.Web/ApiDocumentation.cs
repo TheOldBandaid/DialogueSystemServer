@@ -47,7 +47,7 @@ internal sealed class ApiOperationTransformer : IOpenApiOperationTransformer
         if (authenticated) Response("403", "Недостаточно прав или необходимо сменить временный пароль.");
         if (mutation) Response("400", "Некорректный ввод или отсутствует/неверен X-CSRF-TOKEN.");
         var route = context.Description.RelativePath ?? "";
-        if (route.Contains("{id}", StringComparison.Ordinal) && !(route.EndsWith("/previews", StringComparison.Ordinal) && !mutation))
+        if (route.Contains("{id}", StringComparison.Ordinal))
             Response("404", "Объект не найден в указанном родительском ресурсе или недоступен этому пользователю.");
         if (metadata.OfType<EnableRateLimitingAttribute>().Any()) Response("429", "Превышено число попыток; время повтора указано в Retry-After.");
         if (route.EndsWith("/login", StringComparison.Ordinal)) Response("401", "Неверные учётные данные.");

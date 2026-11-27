@@ -29,24 +29,24 @@ public sealed class CharacterIdentityTests
         Assert.Equal(2, document.Version);
         Assert.Equal(2, document.Lines.Select(line => line.SpeakerKey).Distinct().Count());
         var copy = await editor.Read<DialogueSummary>(HttpMethod.Post, "/api/dialogues/import", Created, document);
-        var copied = await editor.Get<LineSummary[]>($"/api/dialogues/{copy.Id}/lines");
-        Assert.Equal(new[] { a.Id, b.Id }, copied.Select(line => line.SpeakerId));
+        var copied = await editor.GetLines($"/api/dialogues/{copy.Id}/lines");
+        Assert.Equal(new[] { a.Id, b.Id }, copied.OrderBy(line => line.Id).Select(line => line.SpeakerId));
 
         var revision = await editor.Read<DialogueRevisionSummary>(HttpMethod.Post, path + "/revisions", Created,
             new { label = "До переименования" });
         await editor.Expect(NoContent, HttpMethod.Put, $"/api/characters/{a.Id}", new { name = "Новое имя" });
         var restored = await editor.Read<DialogueSummary>(HttpMethod.Post,
             $"{path}/revisions/{revision.Id}/copy", Created);
-        var lines = await editor.Get<LineSummary[]>($"/api/dialogues/{restored.Id}/lines");
+        var lines = await editor.GetLines($"/api/dialogues/{restored.Id}/lines");
         Assert.All(lines, line => Assert.Equal("Тёзка", line.Speaker));
         Assert.Equal(2, lines.Select(line => line.SpeakerId).Distinct().Count());
-        Assert.Equal("Новое имя", (await editor.Get<Character[]>("/api/characters")).Single(c => c.Id == a.Id).Name);
-        var count = (await editor.Get<Character[]>("/api/characters")).Length;
+        Assert.Equal("Новое имя", (await editor.GetAll<CharacterSummary>("/api/characters")).Single(c => c.Id == a.Id).Name);
+        var count = (await editor.GetAll<CharacterSummary>("/api/characters")).Length;
         var again = await editor.Read<DialogueSummary>(HttpMethod.Post,
             $"{path}/revisions/{revision.Id}/copy", Created);
-        var repeated = await editor.Get<LineSummary[]>($"/api/dialogues/{again.Id}/lines");
+        var repeated = await editor.GetLines($"/api/dialogues/{again.Id}/lines");
         Assert.Equal(lines.Select(line => line.SpeakerId), repeated.Select(line => line.SpeakerId));
-        Assert.Equal(count, (await editor.Get<Character[]>("/api/characters")).Length);
+        Assert.Equal(count, (await editor.GetAll<CharacterSummary>("/api/characters")).Length);
     }
 
     [Fact]
@@ -69,17 +69,17 @@ public sealed class CharacterIdentityTests
         await guest.Expect(Unauthorized, HttpMethod.Post, path + "/copy", input);
         await editor.Expect(BadRequest, HttpMethod.Post, path + "/copy", input, includeToken: false);
         var copy = await editor.Read<DialogueSummary>(HttpMethod.Post, path + "/copy", Created, input);
-        var copied = await editor.Get<LineSummary[]>($"/api/dialogues/{copy.Id}/lines");
+        var copied = await editor.GetLines($"/api/dialogues/{copy.Id}/lines");
         Assert.Equal(2, copied.Select(line => line.SpeakerId).Distinct().Count());
         Assert.DoesNotContain(copied, line => line.SpeakerId == a.Id || line.SpeakerId == b.Id);
         var shared = await editor.Read<DialogueSummary>(HttpMethod.Post, path + "/copy", Created);
-        var sharedLines = await editor.Get<LineSummary[]>($"/api/dialogues/{shared.Id}/lines");
-        Assert.Equal(new[] { a.Id, b.Id }, sharedLines.Select(line => line.SpeakerId));
+        var sharedLines = await editor.GetLines($"/api/dialogues/{shared.Id}/lines");
+        Assert.Equal(new[] { a.Id, b.Id }, sharedLines.OrderBy(line => line.Id).Select(line => line.SpeakerId));
         await editor.Expect(NoContent, HttpMethod.Put, $"/api/characters/{copied[0].SpeakerId}", new { name = "Имя в копии" });
-        Assert.All(await editor.Get<LineSummary[]>(path + "/lines"), line => Assert.Equal("Тёзка", line.Speaker));
+        Assert.All(await editor.GetLines(path + "/lines"), line => Assert.Equal("Тёзка", line.Speaker));
         var revision = await editor.Read<DialogueRevisionSummary>(HttpMethod.Post, path + "/revisions", Created, new { label = "Снимок" });
         var restored = await editor.Read<DialogueSummary>(HttpMethod.Post, $"{path}/revisions/{revision.Id}/copy", Created, input);
-        var restoredLines = await editor.Get<LineSummary[]>($"/api/dialogues/{restored.Id}/lines");
+        var restoredLines = await editor.GetLines($"/api/dialogues/{restored.Id}/lines");
         Assert.Equal(2, restoredLines.Select(line => line.SpeakerId).Distinct().Count());
         Assert.DoesNotContain(restoredLines, line => line.SpeakerId == a.Id || line.SpeakerId == b.Id || copied.Any(c => c.SpeakerId == line.SpeakerId));
     }

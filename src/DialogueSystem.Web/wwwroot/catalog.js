@@ -62,7 +62,7 @@ async function loadCatalog(before) {
   if (filters.elements.q.value.trim()) query.set("q", filters.elements.q.value.trim());
   if (filters.elements.start.value) query.set("hasStart", filters.elements.start.value === "set");
   if (before != null) query.set("before", before);
-  const page = await api(`/api/dialogues/page?${query}`);
+  const page = await api(`/api/dialogues?${query}`);
   if (request !== generation) return;
   if (before == null) dialogues = page.items;
   else dialogues.push(...page.items);

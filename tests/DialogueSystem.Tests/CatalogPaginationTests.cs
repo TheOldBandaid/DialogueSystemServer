@@ -23,9 +23,9 @@ public sealed class CatalogPaginationTests
         await db.SaveChangesAsync();
         using var client = new DialogueApiClient(app);
         using var guest = new DialogueApiClient(app);
-        await guest.Expect(Unauthorized, HttpMethod.Get, "/api/dialogues/page");
+        await guest.Expect(Unauthorized, HttpMethod.Get, "/api/dialogues");
         await client.Login("editor", password);
-        var path = "/api/dialogues/page?q=" + Uri.EscapeDataString("СЦЕНАРИЙ");
+        var path = "/api/dialogues?q=" + Uri.EscapeDataString("СЦЕНАРИЙ");
         var page = await client.Get<CatalogPage<DialogueOverview>>(path);
         Assert.Equal(20, page.Items.Count);
         var ids = page.Items.Select(item => item.Id).ToList();
@@ -41,11 +41,13 @@ public sealed class CatalogPaginationTests
         Assert.DoesNotContain(added.Id, ids);
         Assert.Equal(ids.OrderDescending(), ids);
         Assert.Empty((await client.Get<CatalogPage<DialogueOverview>>(path + "&hasStart=true")).Items);
-        var literal = await client.Get<CatalogPage<CharacterSummary>>("/api/characters/page?q=" + Uri.EscapeDataString("%_'"));
+        var literal = await client.Get<CatalogPage<CharacterSummary>>("/api/characters?q=" + Uri.EscapeDataString("%_'"));
         Assert.Single(literal.Items);
-        Assert.Equal(20, (await client.Get<CatalogPage<CharacterSummary>>("/api/characters/page?q=" + Uri.EscapeDataString("ПЕРСОНАЖ"))).Items.Count);
-        Assert.Equal(100, (await client.Get<CharacterSummary[]>("/api/characters")).Length);
-        await client.Expect(BadRequest, HttpMethod.Get, "/api/characters/page?before=0");
+        Assert.Equal(20, (await client.Get<CatalogPage<CharacterSummary>>("/api/characters?q=" + Uri.EscapeDataString("ПЕРСОНАЖ"))).Items.Count);
+        var characters = await client.GetAll<CharacterSummary>("/api/characters");
+        Assert.Equal(await db.Characters.CountAsync(), characters.Length);
+        Assert.Equal(characters.Length, characters.Select(character => character.Id).Distinct().Count());
+        await client.Expect(BadRequest, HttpMethod.Get, "/api/characters?before=0");
     }
 
     [Fact]
@@ -68,7 +70,7 @@ public sealed class CatalogPaginationTests
         await db.SaveChangesAsync();
         using var client = new DialogueApiClient(app);
         await client.Login("editor", password);
-        var page = await client.Get<CatalogPage<LineReference>>($"/api/dialogues/{dialogue.Id}/lines/page?q=" + Uri.EscapeDataString("РЕПЛИКА"));
+        var page = await client.Get<CatalogPage<LineReference>>($"/api/dialogues/{dialogue.Id}/lines?q=" + Uri.EscapeDataString("РЕПЛИКА"));
         Assert.Equal(20, page.Items.Count);
         Assert.All(page.Items, item => Assert.True(item.Text.Length <= 241));
         var usage = await client.Get<CharacterUsage>($"/api/characters/{speaker.Id}/usage");
@@ -79,6 +81,6 @@ public sealed class CatalogPaginationTests
         Assert.Equal(6, rest.Dialogues.Count);
         Assert.Equal(usage.LineCount, rest.LineCount);
         Assert.Empty(usage.Dialogues.Select(item => item.DialogueId).Intersect(rest.Dialogues.Select(item => item.DialogueId)));
-        await client.Expect(NotFound, HttpMethod.Get, "/api/dialogues/2147483647/lines/page");
+        await client.Expect(NotFound, HttpMethod.Get, "/api/dialogues/2147483647/lines");
     }
 }

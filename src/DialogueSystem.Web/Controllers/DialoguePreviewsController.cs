@@ -13,10 +13,6 @@ namespace DialogueSystem.Web.Controllers;
 public sealed class DialoguePreviewsController(PreviewService previews) : ControllerBase
 {
     [HttpGet]
-    public Task<IReadOnlyList<PreviewSessionSummary>> List(int id, CancellationToken cancellationToken) =>
-        previews.ListAsync(id, SessionPrincipal.UserId(User), cancellationToken);
-
-    [HttpGet("page")]
     public async Task<ActionResult<PreviewSessionPage>> Page(int id, Guid? before, CancellationToken cancellationToken)
     {
         var page = await previews.ListPageAsync(id, SessionPrincipal.UserId(User), before, cancellationToken);

@@ -6,10 +6,13 @@ export function initializeCleanup(path, cleaned = () => {}) {
   const apply = byId("cleanup-apply");
   const status = byId("cleanup-status");
   const scope = byId("cleanup-all-users");
+  const interrupted = form.elements.includeInterruptedPreviews;
   let calculation;
   let generation = 0;
 
   function invalidate() {
+    interrupted.disabled = !form.elements.previews.checked;
+    if (interrupted.disabled) interrupted.checked = false;
     generation++;
     calculation = null;
     apply.disabled = true;
@@ -44,12 +47,14 @@ export function initializeCleanup(path, cleaned = () => {}) {
       keepLatest: Number(form.elements.keepLatest.value),
       previews: form.elements.previews.checked,
       revisions: form.elements.revisions.checked,
-      allUsers: !scope.hidden && form.elements.allUsers.checked
+      allUsers: !scope.hidden && form.elements.allUsers.checked,
+      includeInterruptedPreviews: interrupted.checked
     };
     const plan = await api(`${route}/cleanup/plan`, "POST", criteria);
     if (request !== generation || route !== path()) return;
     calculation = { criteria, confirmationToken: plan.confirmationToken };
     status.textContent = `Будет удалено прохождений: ${plan.previewCount}, шагов истории: ${plan.historyStepCount}, версий: ${plan.revisionCount}.` +
+      (criteria.includeInterruptedPreviews ? " Учтены прохождения с удалённой текущей репликой." : "") +
       (plan.hasMore ? " Это первая порция; после удаления можно рассчитать следующую." : "");
     apply.disabled = plan.previewCount + plan.revisionCount === 0;
   });

@@ -37,7 +37,6 @@ public interface IAccountStore
     Task<Account?> FindByLoginAsync(string login, CancellationToken ct);
     Task<Account?> FindByIdAsync(int id, CancellationToken ct);
     Task<AccountSession?> GetSessionAsync(int id, CancellationToken ct);
-    Task<IReadOnlyList<AccountSummary>> ListAsync(CancellationToken ct);
     Task<CatalogPage<AccountSummary>> PageAsync(string? query, int? before, CancellationToken ct);
     Task<InitialAccountsStatus> InitialStatusAsync(CancellationToken ct);
     Task<IStorageTransaction> BeginAsync(CancellationToken ct);
@@ -59,8 +58,6 @@ public sealed class AccountService(IAccountStore store, IPasswordService passwor
     }
 
     public Task<AccountSession?> GetSessionAsync(int id, CancellationToken ct) => store.GetSessionAsync(id, ct);
-
-    public Task<IReadOnlyList<AccountSummary>> ListAsync(CancellationToken ct) => store.ListAsync(ct);
 
     public Task<CatalogPage<AccountSummary>> PageAsync(string? query, int? before, CancellationToken ct) => store.PageAsync(query, before, ct);
 

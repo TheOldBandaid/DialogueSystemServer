@@ -21,11 +21,11 @@ public sealed class CharacterCatalogTests
         Assert.Contains("id=\"character-picker\"", await publicPage.Content.ReadAsStringAsync(), StringComparison.Ordinal);
         await editor.Login("editor", password);
 
-        var list = await editor.Get<Character[]>(characters);
+        var list = await editor.GetAll<CharacterSummary>(characters);
         var marta = Assert.Single(list, character => character.Name == "Марта");
         var terra = Assert.Single(list, character => character.Name == "Терра");
         var martaRoute = $"{characters}/{marta.Id}";
-        var archive = Assert.Single(await editor.Get<DialogueSummary[]>(dialogues),
+        var archive = Assert.Single(await editor.GetDialogues(dialogues),
             item => item.Title == "Ключ от архива");
         var draft = await editor.Read<DialogueSummary>(
             HttpMethod.Post, dialogues, Created, new { title = "У кабинета" });
@@ -83,10 +83,10 @@ public sealed class CharacterCatalogTests
         const string dialogues = "/api/dialogues";
         await editor.Login("editor", password);
 
-        var cast = await editor.Get<Character[]>(characters);
+        var cast = await editor.GetAll<CharacterSummary>(characters);
         var marta = Assert.Single(cast, character => character.Name == "Марта");
         var terra = Assert.Single(cast, character => character.Name == "Терра");
-        var archive = Assert.Single(await editor.Get<DialogueSummary[]>(dialogues),
+        var archive = Assert.Single(await editor.GetDialogues(dialogues),
             dialogue => dialogue.Title == "Ключ от архива");
         var archiveRoute = $"{dialogues}/{archive.Id}";
         var original = await editor.Get<DialogueDocument>(archiveRoute + "/export");

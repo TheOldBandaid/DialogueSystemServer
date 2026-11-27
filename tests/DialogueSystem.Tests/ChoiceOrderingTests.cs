@@ -14,7 +14,7 @@ public sealed class ChoiceOrderingTests
         using var editor = new DialogueApiClient(app);
         using var guest = new DialogueApiClient(app);
         await editor.Login("editor", password);
-        var dialogue = (await editor.Get<DialogueSummary[]>("/api/dialogues"))[0];
+        var dialogue = (await editor.GetDialogues("/api/dialogues"))[0];
         var path = $"/api/dialogues/{dialogue.Id}/lines/{dialogue.StartLineId}";
         var before = await editor.Get<LineContext>(path + "/context");
         var first = before.Outgoing[0];

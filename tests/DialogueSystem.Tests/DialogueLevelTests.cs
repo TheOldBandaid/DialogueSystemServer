@@ -22,10 +22,10 @@ public sealed class DialogueLevelTests
         await using var app = Start(data);
         using var editor = new DialogueApiClient(app);
         await editor.Login("editor", password);
-        var demo = Assert.Single(await editor.Get<DialogueSummary[]>(Dialogues), item => item.Title == DemoTitle);
+        var demo = Assert.Single(await editor.GetDialogues(Dialogues), item => item.Title == DemoTitle);
         var route = $"{Dialogues}/{demo.Id}";
         var previews = $"{route}/previews";
-        var setting = $"{route}/minimum-level";
+        var setting = $"{route}";
 
         Assert.Null(demo.MinimumPlayerLevel);
         await editor.Expect(NoContent, HttpMethod.Put, setting, new { minimumPlayerLevel = 5 });
@@ -60,10 +60,10 @@ public sealed class DialogueLevelTests
         await using var app = Start(data);
         using var editor = new DialogueApiClient(app);
         await editor.Login("editor", password);
-        var original = Assert.Single(await editor.Get<DialogueSummary[]>(Dialogues), item => item.Title == DemoTitle);
+        var original = Assert.Single(await editor.GetDialogues(Dialogues), item => item.Title == DemoTitle);
         var route = $"{Dialogues}/{original.Id}";
 
-        await editor.Expect(NoContent, HttpMethod.Put, $"{route}/minimum-level", new { minimumPlayerLevel = 3 });
+        await editor.Expect(NoContent, HttpMethod.Put, $"{route}", new { minimumPlayerLevel = 3 });
         await editor.Expect(NoContent, HttpMethod.Put, route, new { title = "Архив второго уровня" });
         var exported = await editor.Get<DialogueDocument>($"{route}/export");
         Assert.Equal(3, exported.MinimumPlayerLevel);

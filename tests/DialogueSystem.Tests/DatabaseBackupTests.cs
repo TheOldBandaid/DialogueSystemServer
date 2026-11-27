@@ -34,7 +34,7 @@ public sealed class DatabaseBackupTests
             cookie = Assert.Single(response.Headers.GetValues("Set-Cookie"), value => value.StartsWith("DialogueSystem.Session=", StringComparison.Ordinal)).Split(';')[0];
             using var editor = new DialogueApiClient(app);
             await editor.Login("editor", password);
-            var dialogue = (await editor.Get<DialogueSummary[]>("/api/dialogues"))[0];
+            var dialogue = (await editor.GetDialogues("/api/dialogues"))[0];
             dialogueId = dialogue.Id;
             title = dialogue.Title;
             await editor.Read<PreviewStep>(HttpMethod.Post, $"/api/dialogues/{dialogueId}/previews");

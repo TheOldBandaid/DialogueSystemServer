@@ -6,7 +6,8 @@ namespace DialogueSystem.Application;
 public sealed record CleanupCriteria(
     [property: JsonRequired] long BeforeUnixMilliseconds,
     [Range(1, 1000)] int KeepLatest = 20,
-    bool Previews = true, bool Revisions = false, bool AllUsers = false);
+    bool Previews = true, bool Revisions = false, bool AllUsers = false,
+    bool IncludeInterruptedPreviews = false);
 
 public sealed record CleanupPlan(int PreviewCount, int RevisionCount, long HistoryStepCount,
     bool HasMore, string ConfirmationToken);
@@ -34,6 +35,8 @@ public sealed class DialogueCleanupService(IDialogueCleanupStore store, TimeProv
             return new(CleanupStatus.Invalid, Detail: "Укажите прошедшую дату очистки.");
         if (criteria.KeepLatest is < 1 or > 1000 || !criteria.Previews && !criteria.Revisions)
             return new(CleanupStatus.Invalid, Detail: "Выберите данные для очистки и сохраните от 1 до 1000 последних записей.");
+        if (criteria.IncludeInterruptedPreviews && !criteria.Previews)
+            return new(CleanupStatus.Invalid, Detail: "Для очистки прерванных прохождений включите категорию прохождений.");
         return null;
     }
 }
