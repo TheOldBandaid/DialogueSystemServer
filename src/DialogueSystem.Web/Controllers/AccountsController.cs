@@ -1,6 +1,5 @@
 using System.ComponentModel.DataAnnotations;
 using DialogueSystem.Application;
-using DialogueSystem.Infrastructure;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
@@ -21,6 +20,7 @@ public sealed class AccountsController(AccountService accounts, LoginProtection 
     }
 
     [HttpPost("login")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
     [EnableRateLimiting(LoginProtection.Policy)]
     [ValidateAntiForgeryToken]
     public async Task<ActionResult<AccountSummary>> Login(LoginRequest request, CancellationToken cancellationToken)
@@ -35,7 +35,7 @@ public sealed class AccountsController(AccountService accounts, LoginProtection 
         if (session is null)
             return Unauthorized();
 
-        await HttpContext.SignInAsync(SessionPrincipal.Create(session, HttpContext.RequestServices.GetRequiredService<SessionEpoch>()));
+        await HttpContext.SignInAsync(SessionPrincipal.Create(session, HttpContext.RequestServices.GetRequiredService<ISessionEpoch>()));
         return Ok(session.Summary);
     }
 
@@ -44,6 +44,7 @@ public sealed class AccountsController(AccountService accounts, LoginProtection 
     public ActionResult<AccountSummary> Me() => SessionPrincipal.Summary(User);
 
     [HttpPost("logout")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
     [Authorize]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> Logout()
@@ -57,7 +58,13 @@ public sealed class AccountsController(AccountService accounts, LoginProtection 
     public Task<IReadOnlyList<AccountSummary>> List(CancellationToken cancellationToken) =>
         accounts.ListAsync(cancellationToken);
 
+    [HttpGet("page")]
+    [Authorize(Roles = AccountRoles.Administrator)]
+    public Task<CatalogPage<AccountSummary>> Page([FromQuery, StringLength(CatalogLimits.SearchLength)] string? q,
+        [FromQuery, Range(1, int.MaxValue)] int? before, CancellationToken ct) => accounts.PageAsync(q, before, ct);
+
     [HttpPost]
+    [ProducesResponseType(StatusCodes.Status201Created)]
     [Authorize(Roles = AccountRoles.Administrator)]
     [ValidateAntiForgeryToken]
     public async Task<ActionResult<AccountSummary>> Create(
@@ -79,10 +86,11 @@ public sealed class AccountsController(AccountService accounts, LoginProtection 
     }
 
     [HttpPut("{id:int}/role")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
     [Authorize(Roles = AccountRoles.Administrator)]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> SetRole(int id, RoleRequest request, CancellationToken cancellationToken) =>
-        await accounts.ChangeRoleAsync(id, request.Role, cancellationToken) switch
+        request.Version is null ? VersionPreconditions.Missing() : await accounts.ChangeRoleAsync(id, request.Role, request.Version, cancellationToken) switch
         {
             RoleChange.Changed => NoContent(),
             RoleChange.NotFound => NotFound(),
@@ -90,10 +98,12 @@ public sealed class AccountsController(AccountService accounts, LoginProtection 
             {
                 Detail = "В системе должен остаться администратор."
             }),
+            RoleChange.StaleAccount => Conflict(new ProblemDetails { Detail = "Роль пользователя уже изменилась. Обновите список перед сохранением." }),
             _ => throw new InvalidOperationException()
         };
 
     [HttpPut("me/password")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
     [EnableRateLimiting(LoginProtection.Policy)]
     [Authorize]
     [ValidateAntiForgeryToken]
@@ -124,6 +134,7 @@ public sealed class AccountsController(AccountService accounts, LoginProtection 
         [Required, MaxLength(512)] string Password);
 
     [HttpPost("{id:int}/password")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
     [EnableRateLimiting(LoginProtection.Policy)]
     [Authorize(Roles = AccountRoles.Administrator)]
     [ValidateAntiForgeryToken]
@@ -149,7 +160,8 @@ public sealed class AccountsController(AccountService accounts, LoginProtection 
         [Required, StringLength(512, MinimumLength = 12)] string Password,
         [Required, RegularExpression(AccountRoles.Pattern)] string Role);
 
-    public sealed record RoleRequest([Required, RegularExpression(AccountRoles.Pattern)] string Role);
+    public sealed record RoleRequest([Required, RegularExpression(AccountRoles.Pattern)] string Role,
+        [StringLength(64, MinimumLength = 64)] string? Version = null);
 
     public sealed record PasswordRequest(
         [Required, MaxLength(512)] string CurrentPassword,

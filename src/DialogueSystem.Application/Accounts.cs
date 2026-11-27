@@ -9,14 +9,17 @@ public static class AccountRoles
     public const string Pattern = Administrator + "|" + Editor;
 }
 
-public sealed record AccountSummary(int Id, string Login, string Role, bool MustChangePassword = false);
+public sealed record AccountSummary(int Id, string Login, string Role, bool MustChangePassword = false)
+{
+    public string Version => EditVersions.AccountRole(Id, Role, MustChangePassword);
+}
 
 public sealed record AccountSession(int Id, string Login, string Role, int Version, bool MustChangePassword = false)
 {
     public AccountSummary Summary => new(Id, Login, Role, MustChangePassword);
 }
 
-public enum RoleChange { Changed, NotFound, LastAdministrator }
+public enum RoleChange { Changed, NotFound, LastAdministrator, StaleAccount }
 public enum PasswordChange { Changed, WrongPassword, SamePassword, StaleAccount }
 public enum PasswordReset { Changed, NotFound, WrongPassword, Forbidden, OwnAccount, StaleAccount }
 public sealed record InitialAccountsStatus(bool AdminExists, bool EditorExists, bool HasAdministrator);
@@ -33,6 +36,7 @@ public interface IAccountStore
     Task<Account?> FindByIdAsync(int id, CancellationToken ct);
     Task<AccountSession?> GetSessionAsync(int id, CancellationToken ct);
     Task<IReadOnlyList<AccountSummary>> ListAsync(CancellationToken ct);
+    Task<CatalogPage<AccountSummary>> PageAsync(string? query, int? before, CancellationToken ct);
     Task<InitialAccountsStatus> InitialStatusAsync(CancellationToken ct);
     Task<IStorageTransaction> BeginAsync(CancellationToken ct);
     Task AddAsync(Account account, CancellationToken ct);
@@ -55,6 +59,8 @@ public sealed class AccountService(IAccountStore store, IPasswordService passwor
     public Task<AccountSession?> GetSessionAsync(int id, CancellationToken ct) => store.GetSessionAsync(id, ct);
 
     public Task<IReadOnlyList<AccountSummary>> ListAsync(CancellationToken ct) => store.ListAsync(ct);
+
+    public Task<CatalogPage<AccountSummary>> PageAsync(string? query, int? before, CancellationToken ct) => store.PageAsync(query, before, ct);
 
     public Task<InitialAccountsStatus> InitialStatusAsync(CancellationToken ct) => store.InitialStatusAsync(ct);
 
@@ -81,13 +87,14 @@ public sealed class AccountService(IAccountStore store, IPasswordService passwor
         return new(account.Id, account.Login, account.Role);
     }
 
-    public async Task<RoleChange> ChangeRoleAsync(int id, string role, CancellationToken ct)
+    public async Task<RoleChange> ChangeRoleAsync(int id, string role, string version, CancellationToken ct)
     {
         AccountRules.ValidateRole(role);
         await using var transaction = await store.BeginAsync(ct);
         var account = await store.GetSessionAsync(id, ct);
         if (account is null)
             return RoleChange.NotFound;
+        if (version != account.Summary.Version) return RoleChange.StaleAccount;
 
         if (account.Role == AccountRoles.Administrator && role == AccountRoles.Editor &&
             !await store.HasOtherAdministratorAsync(id, ct))
@@ -128,7 +135,6 @@ public sealed class AccountService(IAccountStore store, IPasswordService passwor
         if (account is null) return PasswordReset.NotFound;
         var hash = passwords.Hash(account, temporaryPassword);
         await using var transaction = await store.BeginAsync(ct);
-        // Recheck authority inside the write transaction after the expensive password verification.
         var currentAdministrator = await store.GetSessionAsync(administratorId, ct);
         if (currentAdministrator is null || currentAdministrator.Role != AccountRoles.Administrator ||
             currentAdministrator.MustChangePassword || currentAdministrator.Version != administrator.SessionVersion)

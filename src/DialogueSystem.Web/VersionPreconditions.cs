@@ -21,12 +21,13 @@ internal static class VersionPreconditions
         return null;
     }
 
-    public static IActionResult Result(ChangeStatus status) => status switch
+    public static IActionResult Result(ChangeStatus status, bool conditional = false) => status switch
     {
         ChangeStatus.Saved => new NoContentResult(),
         ChangeStatus.NotFound => new NotFoundResult(),
-        ChangeStatus.Conflict => new ConflictObjectResult(new ProblemDetails
-            { Detail = "Объект или связанные данные уже изменились. Обновите страницу перед повторным действием." }),
+        ChangeStatus.Conflict => new ObjectResult(new ProblemDetails
+            { Detail = "Объект или связанные данные уже изменились. Обновите страницу перед повторным действием." })
+            { StatusCode = conditional ? StatusCodes.Status412PreconditionFailed : StatusCodes.Status409Conflict },
         _ => throw new InvalidOperationException()
     };
 }

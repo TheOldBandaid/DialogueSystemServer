@@ -43,7 +43,6 @@ internal static class DialogueImporter
                 : byName.GetValueOrDefault(name);
             if (character is not null) { speakers[key] = character; continue; }
             var renamed = document.Version == 2 && original is not null;
-            // Reuse a snapshot variant on subsequent imports; never merge unrelated namesakes.
             speakers[key] = new Character
             {
                 Name = name,

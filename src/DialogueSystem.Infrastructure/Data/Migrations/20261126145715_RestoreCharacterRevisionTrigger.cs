@@ -10,7 +10,6 @@ namespace DialogueSystem.Infrastructure.Data.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            // Repair databases where an older rollback rebuilt Characters and lost its trigger.
             migrationBuilder.Sql("""
                 CREATE TRIGGER IF NOT EXISTS Characters_Revision_Update AFTER UPDATE OF Name ON Characters
                 BEGIN UPDATE Dialogues SET Revision = Revision + 1
@@ -21,7 +20,6 @@ namespace DialogueSystem.Infrastructure.Data.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            // The trigger belongs to AddGraphRevision and must remain when this repair is reverted.
         }
     }
 }

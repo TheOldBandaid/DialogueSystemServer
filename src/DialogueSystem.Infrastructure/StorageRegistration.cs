@@ -18,6 +18,7 @@ public static class StorageRegistration
         return services
             .AddSingleton(_ => new DatabaseBackups(dataDirectory))
             .AddSingleton(_ => new SessionEpoch(dataDirectory))
+            .AddSingleton<ISessionEpoch>(services => services.GetRequiredService<SessionEpoch>())
             .AddSingleton<GraphSnapshots>()
             .AddDbContext<DialogueDbContext>(options => options.UseSqlite(connection.ToString()).AddInterceptors(new SqliteSearch()))
             .AddScoped<IAccountStore, SqliteAccounts>()

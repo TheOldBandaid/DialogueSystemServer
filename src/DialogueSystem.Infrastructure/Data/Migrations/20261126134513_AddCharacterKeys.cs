@@ -33,8 +33,6 @@ namespace DialogueSystem.Infrastructure.Data.Migrations
                 name: "IX_Characters_Key",
                 table: "Characters");
 
-            // Native DROP COLUMN preserves the revision trigger and referencing tables.
-            // EF's SQLite table rebuild would silently discard this custom trigger.
             migrationBuilder.Sql("ALTER TABLE Characters DROP COLUMN Key;");
         }
     }

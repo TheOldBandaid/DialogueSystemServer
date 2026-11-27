@@ -1,6 +1,8 @@
+using DialogueSystem.Application;
+
 namespace DialogueSystem.Infrastructure;
 
-public sealed class SessionEpoch
+public sealed class SessionEpoch : ISessionEpoch
 {
     public string Value { get; }
 

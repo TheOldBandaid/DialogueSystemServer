@@ -8,6 +8,9 @@ const roleLabels = { Editor: "Редактор", Administrator: "Админис�
 let token = "";
 let pendingOperations = 0;
 let signedInId;
+let accountsCursor;
+let accountsGeneration = 0;
+let accountsTimer;
 
 export async function api(path, method = "GET", body) {
   const headers = method === "GET" ? {} : { "X-CSRF-TOKEN": token, "Content-Type": "application/json" };
@@ -70,6 +73,9 @@ function showAccountManagement(profile) {
   signedInId = profile?.id;
   accountAdmin.hidden = profile?.role !== "Administrator";
   if (accountAdmin.hidden) {
+    accountsGeneration++;
+    accountsCursor = null;
+    clearTimeout(accountsTimer);
     accountAdmin.open = false;
     newAccountForm.reset();
     byId("accounts-list").replaceChildren();
@@ -104,7 +110,7 @@ function accountRow(account) {
   role.onchange = () => { save.disabled = role.value === account.role; };
 
   form.onsubmit = run(async () => {
-    await accountRequest(`/api/accounts/${account.id}/role`, "PUT", { role: role.value });
+    await accountRequest(`/api/accounts/${account.id}/role`, "PUT", { role: role.value, version: account.version });
     showAccountManagement(await api("/api/accounts/me"));
     if (!accountAdmin.hidden) await loadAccounts();
     byId("status").textContent = `Роль пользователя «${account.login}» обновлена.`;
@@ -142,16 +148,32 @@ function accountRow(account) {
   return row;
 }
 
-async function loadAccounts() {
-  const accounts = await accountRequest("/api/accounts");
-  byId("accounts-list").replaceChildren(...accounts.map(accountRow));
+async function loadAccounts(before) {
+  const generation = before == null ? ++accountsGeneration : accountsGeneration;
+  const query = new URLSearchParams();
+  const text = byId("accounts-search")?.value.trim();
+  if (text) query.set("q", text);
+  if (before != null) query.set("before", before);
+  const page = await accountRequest(`/api/accounts/page?${query}`);
+  if (generation !== accountsGeneration || accountAdmin.hidden) return;
+  const rows = page.items.map(accountRow);
+  if (before == null) byId("accounts-list").replaceChildren(...rows);
+  else byId("accounts-list").append(...rows);
+  accountsCursor = page.nextBeforeId;
+  byId("accounts-more").hidden = accountsCursor == null;
 }
 
-const refreshAccounts = run(loadAccounts);
+const refreshAccounts = run(() => loadAccounts());
 accountAdmin.ontoggle = () => {
   if (accountAdmin.open && !accountAdmin.hidden) refreshAccounts();
 };
 byId("refresh-accounts").onclick = refreshAccounts;
+if (byId("accounts-more")) byId("accounts-more").onclick = run(() => accountsCursor == null ? undefined : loadAccounts(accountsCursor));
+if (byId("accounts-search")) byId("accounts-search").oninput = () => {
+  accountsGeneration++;
+  clearTimeout(accountsTimer);
+  accountsTimer = setTimeout(refreshAccounts, 250);
+};
 newAccountForm.onsubmit = run(async () => {
   const input = Object.fromEntries(new FormData(newAccountForm));
   const account = await accountRequest("/api/accounts", "POST", input);

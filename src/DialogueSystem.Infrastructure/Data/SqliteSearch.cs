@@ -6,7 +6,6 @@ namespace DialogueSystem.Infrastructure.Data;
 
 internal sealed class SqliteSearch : DbConnectionInterceptor
 {
-    // Executed only by SQLite, through the EF function mapping. No user text becomes SQL.
     public static bool Contains(string value, string query) => throw new NotSupportedException();
 
     private static void Register(DbConnection connection) => ((SqliteConnection)connection)

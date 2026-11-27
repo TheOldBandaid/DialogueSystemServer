@@ -78,7 +78,6 @@ public sealed class DatabaseBackups(string directory, TimeProvider? clock = null
             throw new InvalidDataException("Копия создана другой версией схемы. Используйте соответствующую версию сервера.");
     }
 
-    // The caller must hold DataDirectoryLease: restoration is a local, offline operation.
     public async Task<DatabaseRestore> RestoreAsync(string source, CancellationToken ct = default)
     {
         source = System.IO.Path.GetFullPath(source);
@@ -88,14 +87,12 @@ public sealed class DatabaseBackups(string directory, TimeProvider? clock = null
         var staging = System.IO.Path.Combine(dataDirectory, $"restore-{Guid.NewGuid():N}.partial");
         try
         {
-            // Snapshot the source first, including committed WAL data, then validate the exact snapshot being restored.
             await CopyDatabaseAsync(source, staging, ct);
             await ValidateAsync(staging, requireApplication: true, ct);
             var preserved = Directory.CreateDirectory(System.IO.Path.Combine(BackupDirectory, $"before-restore-{Guid.NewGuid():N}"));
             foreach (var suffix in new[] { "", "-wal", "-shm", "-journal" })
                 if (File.Exists(DatabasePath + suffix))
                     File.Copy(DatabasePath + suffix, System.IO.Path.Combine(preserved.FullName, "dialogues.db" + suffix));
-            // A restored SessionVersion might equal an old cookie's version: invalidate through a marker outside the DB.
             SessionEpoch.Rotate(dataDirectory);
             await CopyDatabaseAsync(staging, DatabasePath, ct, standalone: false);
             return new(preserved.FullName);
@@ -139,7 +136,6 @@ public sealed class DatabaseBackups(string directory, TimeProvider? clock = null
         await output.OpenAsync(ct);
         ct.ThrowIfCancellationRequested();
         input.BackupDatabase(output);
-        // Publish portable backups as a single file; preserve WAL for the working database.
         using var journal = output.CreateCommand();
         journal.CommandText = standalone ? "PRAGMA journal_mode=DELETE;" : "PRAGMA journal_mode=WAL;";
         await journal.ExecuteScalarAsync(ct);

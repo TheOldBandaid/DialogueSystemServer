@@ -19,15 +19,25 @@ internal sealed class SqliteAccounts(DialogueDbContext db) : IAccountStore
 
     public async Task<IReadOnlyList<AccountSummary>> ListAsync(CancellationToken ct) =>
         await db.Accounts.OrderBy(account => account.Login)
+            .Take(CatalogLimits.LegacyListSize)
             .Select(account => new AccountSummary(account.Id, account.Login, account.Role, account.MustChangePassword))
             .ToListAsync(ct);
 
+    public Task<CatalogPage<AccountSummary>> PageAsync(string? query, int? before, CancellationToken ct)
+    {
+        var selected = db.Accounts.AsQueryable();
+        var text = query?.Trim();
+        if (!string.IsNullOrEmpty(text)) selected = selected.Where(account => SqliteSearch.Contains(account.Login, text));
+        if (before.HasValue) selected = selected.Where(account => account.Id < before.Value);
+        return CatalogQueries.PageAsync(selected.OrderByDescending(account => account.Id)
+            .Select(account => new AccountSummary(account.Id, account.Login, account.Role, account.MustChangePassword)), account => account.Id, ct);
+    }
+
     public async Task<InitialAccountsStatus> InitialStatusAsync(CancellationToken ct)
     {
-        var accounts = await db.Accounts.Select(account => new { account.Login, account.Role }).ToListAsync(ct);
-        return new(accounts.Any(account => account.Login == "admin"),
-            accounts.Any(account => account.Login == "editor"),
-            accounts.Any(account => account.Role == AccountRoles.Administrator));
+        return new(await db.Accounts.AnyAsync(account => account.Login == "admin", ct),
+            await db.Accounts.AnyAsync(account => account.Login == "editor", ct),
+            await db.Accounts.AnyAsync(account => account.Role == AccountRoles.Administrator, ct));
     }
 
     public async Task<IStorageTransaction> BeginAsync(CancellationToken ct) =>

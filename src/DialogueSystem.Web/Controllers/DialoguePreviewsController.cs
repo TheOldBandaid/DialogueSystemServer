@@ -32,12 +32,14 @@ public sealed class DialoguePreviewsController(PreviewService previews) : Contro
     }
 
     [HttpPost]
+    [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<ActionResult<PreviewStep>> StartPreview(
         int id, [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] PreviewInput? input,
         CancellationToken cancellationToken) =>
         PreviewResponse(await previews.StartAsync(id, SessionPrincipal.UserId(User), input?.PlayerLevel, cancellationToken));
 
     [HttpPost("{previewId:guid}/choices")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<ActionResult<PreviewStep>> AdvancePreview(
         int id, Guid previewId, SelectChoice request, CancellationToken cancellationToken) =>
         PreviewResponse(await previews.AdvanceAsync(id, SessionPrincipal.UserId(User), previewId, request, cancellationToken));

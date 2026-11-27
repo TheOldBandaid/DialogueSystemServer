@@ -33,8 +33,6 @@ internal static class DialogueGraphLoader
         var choices = await db.Choices.AsNoTracking().Where(choice => choice.DialogueId == dialogueId)
             .ToListAsync(cancellationToken);
         var graph = new DialogueGraph(dialogue, choices);
-        // A write transaction can still roll back: publish only read snapshots.
-        // Callers performing writes use the same revision but do not populate the shared cache.
         if (publish)
         {
             var textSize = 2 * (dialogue.Lines.Sum(line => (long)line.Text.Length + line.Speaker.Name.Length) +

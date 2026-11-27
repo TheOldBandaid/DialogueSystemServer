@@ -136,7 +136,6 @@ public sealed class PreviewHistoryTests
         await using (var db = new DialogueDbContext(options))
         {
             await db.Database.MigrateAsync("20261122123604_AddMinimumPlayerLevel");
-            // Insert using the historical schema, independently of the current EF model.
             dialogue.Id = 1;
             speaker.Id = 1;
             start.Id = 1;

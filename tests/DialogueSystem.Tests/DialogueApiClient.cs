@@ -44,6 +44,12 @@ internal sealed class DialogueApiClient(WebApplicationFactory<Program> app) : ID
         if (includeVersion)
         {
             var parts = path.Split('?')[0].Trim('/').Split('/');
+            if (method == HttpMethod.Put && parts.Length == 4 && parts[1] == "accounts" && parts[3] == "role" && body is JsonObject role && !role.ContainsKey("version"))
+            {
+                using var target = await client.GetAsync($"/api/accounts/{parts[2]}");
+                role["version"] = target.IsSuccessStatusCode
+                    ? (await target.Content.ReadFromJsonAsync<JsonObject>())!["version"]!.GetValue<string>() : new string('0', 64);
+            }
             var line = parts.Length >= 5 && parts[0] == "api" && parts[1] == "dialogues" && parts[3] == "lines";
             var metadata = parts.Length >= 3 && parts[0] == "api" &&
                 (parts[1] == "dialogues" && (parts.Length == 3 || parts.Length == 4 && parts[3] is "start" or "minimum-level") ||

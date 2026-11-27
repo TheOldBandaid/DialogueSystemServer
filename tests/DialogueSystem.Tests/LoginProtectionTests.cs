@@ -17,6 +17,7 @@ public sealed class LoginProtectionTests
             await guest.Login(i % 2 == 0 ? "editor" : " EDITOR ", "wrong", Unauthorized);
         using var reply = await guest.Send(HttpMethod.Post, "/api/accounts/login", new { login = "editor", password });
         Assert.Equal(TooManyRequests, reply.StatusCode);
+        Assert.Equal("application/problem+json", reply.Content.Headers.ContentType?.MediaType);
         Assert.NotNull(reply.Headers.RetryAfter);
         await guest.Login("admin", password);
         Assert.Equal(AccountRoles.Administrator, (await guest.Get<AccountSummary>("/api/accounts/me")).Role);

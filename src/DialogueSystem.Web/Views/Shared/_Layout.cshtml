@@ -53,7 +53,9 @@
           </label>
           <button>Создать пользователя</button>
         </form>
+        <label>Поиск по логину <input id="accounts-search" type="search" maxlength="160"></label>
         <ul id="accounts-list"></ul>
+        <button id="accounts-more" type="button" hidden>Показать ещё пользователей</button>
         <button id="refresh-accounts" type="button">Обновить список</button>
       </details>
       <div id="page-content">@RenderBody()</div>

@@ -17,6 +17,8 @@ public sealed record LineSummary(int Id, string Speaker, string Text, bool IsEnd
     public string Version => EditVersions.Line(SpeakerId, Text, IsEnding, IsStoryBranch);
 }
 
+public sealed record LineResource(LineSummary Line, string DeleteVersion);
+
 public sealed record ChoiceLink(
     int Id, string Text, int Position, LineSummary Line, string? RequiredState = null, string? NextState = null,
     int TargetLineId = 0)

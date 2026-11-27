@@ -5,6 +5,7 @@ namespace DialogueSystem.Application;
 
 public static class EditVersions
 {
+    public static string AccountRole(int id, string role, bool mustChangePassword) => Hash(new { kind = "account-role", id, role, mustChangePassword });
     public static string Dialogue(int id, long revision) => Hash(new { kind = "dialogue", id, revision });
     public static string DialogueDeletion(int id, long revision, long activityRevision) => Hash(new { kind = "dialogue-delete", id, revision, activityRevision });
     public static string Character(int id, long revision) => Hash(new { kind = "character", id, revision });

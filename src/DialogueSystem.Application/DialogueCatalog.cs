@@ -1,5 +1,3 @@
-using DialogueSystem.Domain;
-
 namespace DialogueSystem.Application;
 
 public interface IDialogueCatalog
@@ -8,6 +6,7 @@ public interface IDialogueCatalog
     Task<IReadOnlyList<DialogueOverview>> OverviewAsync(CancellationToken ct);
     Task<CatalogPage<DialogueOverview>> PageAsync(string? query, bool? hasStart, int? before, CancellationToken ct);
     Task<DialogueSummary?> FindAsync(int id, CancellationToken ct);
+    Task<LineResource?> FindLineAsync(int id, int lineId, CancellationToken ct);
     Task<DialogueSummary> CreateAsync(string title, CancellationToken ct);
     Task<ChangeStatus> RenameAsync(int id, string title, string version, CancellationToken ct);
     Task<ChangeStatus> DeleteAsync(int id, string version, CancellationToken ct);

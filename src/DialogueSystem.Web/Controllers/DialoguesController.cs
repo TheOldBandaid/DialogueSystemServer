@@ -30,10 +30,13 @@ public sealed class DialoguesController(IDialogueCatalog catalog) : ControllerBa
     public async Task<ActionResult<DialogueSummary>> Get(int id, CancellationToken cancellationToken)
     {
         var dialogue = await catalog.FindAsync(id, cancellationToken);
-        return dialogue is null ? NotFound() : Ok(dialogue);
+        if (dialogue is null) return NotFound();
+        Response.Headers.ETag = $"\"{dialogue.DeleteVersion}\"";
+        return Ok(dialogue);
     }
 
     [HttpPost]
+    [ProducesResponseType(StatusCodes.Status201Created)]
     public async Task<ActionResult<DialogueSummary>> Create(DialogueInput input, CancellationToken cancellationToken)
     {
         var created = await catalog.CreateAsync(input.Title, cancellationToken);
@@ -41,18 +44,21 @@ public sealed class DialoguesController(IDialogueCatalog catalog) : ControllerBa
     }
 
     [HttpPut("{id:int}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> Update(int id, DialogueInput input, CancellationToken cancellationToken) =>
         input.Version is null ? VersionPreconditions.Missing() :
             VersionPreconditions.Result(await catalog.RenameAsync(id, input.Title, input.Version, cancellationToken));
 
     [HttpDelete("{id:int}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> Delete(int id, [FromHeader(Name = "If-Match")] string? version, CancellationToken cancellationToken)
     {
         var error = VersionPreconditions.Header(version, out var expected);
-        return error ?? VersionPreconditions.Result(await catalog.DeleteAsync(id, expected, cancellationToken));
+        return error ?? VersionPreconditions.Result(await catalog.DeleteAsync(id, expected, cancellationToken), conditional: true);
     }
 
     [HttpPut("{id:int}/minimum-level")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> SetMinimumLevel(int id, MinimumLevelInput input, CancellationToken cancellationToken) =>
         input.Version is null ? VersionPreconditions.Missing() :
             VersionPreconditions.Result(await catalog.SetMinimumLevelAsync(id, input.MinimumPlayerLevel, input.Version, cancellationToken));
@@ -73,6 +79,7 @@ public sealed class DialoguesController(IDialogueCatalog catalog) : ControllerBa
     }
 
     [HttpPost("import")]
+    [ProducesResponseType(StatusCodes.Status201Created)]
     public async Task<ActionResult<DialogueSummary>> Import(DialogueDocument document, CancellationToken cancellationToken)
     {
         var created = await catalog.ImportAsync(document, cancellationToken);
@@ -98,13 +105,14 @@ public sealed class DialoguesController(IDialogueCatalog catalog) : ControllerBa
     [HttpGet("{id:int}/lines/{lineId:int}")]
     public async Task<ActionResult<LineSummary>> GetLine(int id, int lineId, CancellationToken ct)
     {
-        var context = await catalog.ContextAsync(id, lineId, ct);
-        if (context is null) return NotFound();
-        Response.Headers.ETag = $"\"{context.DeleteVersion}\"";
-        return Ok(context.Line);
+        var resource = await catalog.FindLineAsync(id, lineId, ct);
+        if (resource is null) return NotFound();
+        Response.Headers.ETag = $"\"{resource.DeleteVersion}\"";
+        return Ok(resource.Line);
     }
 
     [HttpPost("{id:int}/copy")]
+    [ProducesResponseType(StatusCodes.Status201Created)]
     public async Task<ActionResult<DialogueSummary>> Copy(int id,
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] DialogueCopyInput? input, CancellationToken ct)
     {

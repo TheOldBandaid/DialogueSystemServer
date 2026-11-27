@@ -24,11 +24,21 @@ builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationSc
     options.Cookie.SameSite = SameSiteMode.Strict;
     options.Cookie.SecurePolicy = builder.Environment.IsDevelopment() ? CookieSecurePolicy.SameAsRequest : CookieSecurePolicy.Always;
     options.Events.OnValidatePrincipal = SessionPrincipal.ValidateAsync;
+    options.Events.OnRedirectToLogin = context =>
+    {
+        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+        return Task.CompletedTask;
+    };
+    options.Events.OnRedirectToAccessDenied = context =>
+    {
+        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+        return Task.CompletedTask;
+    };
 });
 builder.Services.AddAuthorization();
 builder.Services.AddAntiforgery(options => options.HeaderName = "X-CSRF-TOKEN");
 builder.Services.AddControllersWithViews();
-builder.Services.AddOpenApi();
+builder.Services.AddOpenApi(options => options.AddDocumentTransformer<ApiDocumentTransformer>().AddOperationTransformer<ApiOperationTransformer>());
 builder.Services.AddProblemDetails();
 builder.Services.AddHttpsRedirection(options => options.HttpsPort =
     builder.Configuration.GetValue<int?>("HTTPS_PORT") ?? 443);
@@ -77,25 +87,9 @@ if (!app.Environment.IsDevelopment())
     app.UseHttpsRedirection();
 }
 app.UseStaticFiles();
+app.UseStatusCodePages(ApiErrors.WriteAsync);
 app.UseAuthentication();
-app.Use(async (context, next) =>
-{
-    var path = context.Request.Path.Value?.TrimEnd('/').ToLowerInvariant();
-    if (context.User.Identity?.IsAuthenticated == true && SessionPrincipal.MustChangePassword(context.User) &&
-        context.Request.Path.StartsWithSegments("/api", StringComparison.OrdinalIgnoreCase) &&
-        path is not ("/api/accounts/me" or "/api/accounts/me/password" or "/api/accounts/logout" or "/api/accounts/csrf"))
-    {
-        context.Response.StatusCode = StatusCodes.Status403Forbidden;
-        await context.Response.WriteAsJsonAsync(new Microsoft.AspNetCore.Mvc.ProblemDetails
-        {
-            Status = StatusCodes.Status403Forbidden,
-            Detail = "Перед работой необходимо сменить временный пароль.",
-            Extensions = { ["code"] = "password-change-required" }
-        });
-        return;
-    }
-    await next(context);
-});
+app.UseMiddleware<ApiAccessMiddleware>();
 app.UseAuthorization();
 app.UseRateLimiter();
 app.MapControllers();

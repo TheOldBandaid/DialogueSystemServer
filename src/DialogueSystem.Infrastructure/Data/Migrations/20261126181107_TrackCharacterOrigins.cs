@@ -29,7 +29,6 @@ namespace DialogueSystem.Infrastructure.Data.Migrations
                 name: "IX_Characters_OriginKey_Name",
                 table: "Characters");
 
-            // Preserve the custom character revision trigger during rollback.
             migrationBuilder.Sql("ALTER TABLE Characters DROP COLUMN OriginKey;");
         }
     }

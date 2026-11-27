@@ -12,10 +12,12 @@ namespace DialogueSystem.Web.Controllers;
 public sealed class DialogueCleanupController(DialogueCleanupService cleanup) : ControllerBase
 {
     [HttpPost("plan")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> Plan(int id, CleanupCriteria criteria, CancellationToken ct) =>
         Result(await cleanup.PlanAsync(id, SessionPrincipal.UserId(User), criteria, ct));
 
     [HttpPost]
+    [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<IActionResult> Apply(int id, CleanupInput input, CancellationToken ct)
     {
         if (input.ConfirmationToken is null)

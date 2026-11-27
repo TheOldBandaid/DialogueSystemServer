@@ -1,6 +1,5 @@
 using System.ComponentModel.DataAnnotations;
 using DialogueSystem.Application;
-using DialogueSystem.Domain;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -25,10 +24,13 @@ public sealed class CharactersController(ICharacterCatalog catalog) : Controller
     public async Task<ActionResult<CharacterSummary>> Get(int id, CancellationToken cancellationToken)
     {
         var character = await catalog.FindAsync(id, cancellationToken);
-        return character is null ? NotFound() : Ok(character);
+        if (character is null) return NotFound();
+        Response.Headers.ETag = $"\"{character.Version}\"";
+        return Ok(character);
     }
 
     [HttpPost]
+    [ProducesResponseType(StatusCodes.Status201Created)]
     public async Task<ActionResult<CharacterSummary>> Create(CharacterInput input, CancellationToken cancellationToken)
     {
         var character = await catalog.CreateAsync(input.Name, cancellationToken);
@@ -44,11 +46,13 @@ public sealed class CharactersController(ICharacterCatalog catalog) : Controller
     }
 
     [HttpPut("{id:int}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> Update(int id, CharacterInput input, CancellationToken cancellationToken) =>
         input.Version is null ? VersionPreconditions.Missing() :
             VersionPreconditions.Result(await catalog.RenameAsync(id, input.Name, input.Version, cancellationToken));
 
     [HttpPost("{id:int}/reassign")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
     public async Task<ActionResult<ReassignedLines>> Reassign(
         int id, ReassignmentInput input, CancellationToken cancellationToken)
     {
@@ -67,6 +71,7 @@ public sealed class CharactersController(ICharacterCatalog catalog) : Controller
     }
 
     [HttpDelete("{id:int}")]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
     public async Task<IActionResult> Delete(int id, [FromHeader(Name = "If-Match")] string? version, CancellationToken cancellationToken)
     {
         var error = VersionPreconditions.Header(version, out var expected);
@@ -75,7 +80,8 @@ public sealed class CharactersController(ICharacterCatalog catalog) : Controller
         {
             CharacterRemoval.Removed => NoContent(),
             CharacterRemoval.NotFound => NotFound(),
-            CharacterRemoval.Conflict => Conflict(new ProblemDetails { Detail = "Персонаж уже изменился. Обновите данные перед удалением." }),
+            CharacterRemoval.Conflict => StatusCode(StatusCodes.Status412PreconditionFailed,
+                new ProblemDetails { Detail = "Персонаж уже изменился. Обновите данные перед удалением." }),
             CharacterRemoval.InUse => Conflict(new ProblemDetails
             {
                 Detail = "Персонаж указан в репликах. Сначала смените говорящего в этих репликах."

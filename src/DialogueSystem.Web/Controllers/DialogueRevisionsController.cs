@@ -21,6 +21,7 @@ public sealed class DialogueRevisionsController(IDialogueRevisions revisions) : 
     }
 
     [HttpPost]
+    [ProducesResponseType(StatusCodes.Status201Created)]
     public async Task<ActionResult<DialogueRevisionSummary>> Create(int id, RevisionInput input, CancellationToken ct)
     {
         try
@@ -42,6 +43,7 @@ public sealed class DialogueRevisionsController(IDialogueRevisions revisions) : 
     }
 
     [HttpPost("{revisionId:int}/copy")]
+    [ProducesResponseType(StatusCodes.Status201Created)]
     public async Task<ActionResult<DialogueSummary>> Copy(int id, int revisionId,
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] DialogueCopyInput? input, CancellationToken ct)
     {

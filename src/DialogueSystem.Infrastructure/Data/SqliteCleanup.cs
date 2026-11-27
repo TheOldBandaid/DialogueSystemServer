@@ -26,7 +26,6 @@ internal sealed class SqliteCleanup(DialogueDbContext db, DatabaseBackups backup
         if (plan.PreviewCount + plan.RevisionCount == 0)
             return new(CleanupStatus.Ready, Summary: new(0, 0, 0, false));
 
-        // The write reservation prevents changes between this verified backup and deletion.
         await backups.CreateAsync(BackupKind.Cleanup, ct);
         var previewIds = selection.Previews.Select(preview => preview.Id).ToArray();
         var revisionIds = selection.Revisions.Select(revision => revision.Id).ToArray();

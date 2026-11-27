@@ -28,7 +28,7 @@ public sealed class LoginProtection : IDisposable
         {
             Status = StatusCodes.Status429TooManyRequests,
             Detail = "Слишком много попыток входа. Подождите минуту и повторите."
-        }, ct);
+        }, options: null, contentType: "application/problem+json", cancellationToken: ct);
     }
 
     public void Dispose() => accounts.Dispose();

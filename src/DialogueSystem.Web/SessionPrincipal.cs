@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Security.Claims;
 using DialogueSystem.Application;
-using DialogueSystem.Infrastructure;
 using Microsoft.AspNetCore.Authentication.Cookies;
 
 namespace DialogueSystem.Web;
@@ -12,7 +11,7 @@ internal static class SessionPrincipal
     private const string ChangePasswordClaim = "dialogue-change-password";
     private const string EpochClaim = "dialogue-session-epoch";
 
-    public static ClaimsPrincipal Create(AccountSession session, SessionEpoch epoch) => new(new ClaimsIdentity(
+    public static ClaimsPrincipal Create(AccountSession session, ISessionEpoch epoch) => new(new ClaimsIdentity(
         [
             new(ClaimTypes.NameIdentifier, session.Id.ToString(CultureInfo.InvariantCulture)),
             new(ClaimTypes.Name, session.Login),
@@ -40,7 +39,7 @@ internal static class SessionPrincipal
         }
 
         var accounts = context.HttpContext.RequestServices.GetRequiredService<AccountService>();
-        var epoch = context.HttpContext.RequestServices.GetRequiredService<SessionEpoch>();
+        var epoch = context.HttpContext.RequestServices.GetRequiredService<ISessionEpoch>();
         var session = await accounts.GetSessionAsync(id, context.HttpContext.RequestAborted);
         var version = principal.FindFirstValue(VersionClaim) ?? "0";
         if (session is null || version != session.Version.ToString(CultureInfo.InvariantCulture) ||

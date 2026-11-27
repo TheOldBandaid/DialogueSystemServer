@@ -6,7 +6,7 @@ public sealed record LineChange(int SpeakerId, string Text, bool IsEnding, bool 
 public sealed record ChoiceChange(
     int TargetLineId, string Text, int Position, string? RequiredState, string? NextState, string? Version = null);
 
-public enum EditStatus { Saved, NotFound, Invalid, Conflict }
+public enum EditStatus { Saved, NotFound, Invalid, Conflict, StaleVersion }
 
 public sealed record EditResult(EditStatus Status, string? Detail = null,
     LineSummary? NewLine = null, ChoiceSummary? NewChoice = null);
@@ -128,7 +128,7 @@ public sealed class LineEditor(ILineStore store)
             return new(EditStatus.NotFound);
         var revision = await store.DialogueRevisionAsync(id, ct);
         if (version != EditVersions.LineDeletion(lineId, EditVersions.Line(line.SpeakerId, line.Text, line.IsEnding, line.IsStoryBranch), revision!.Value))
-            return new(EditStatus.Conflict, "Реплика или её связи уже изменились. Обновите контекст перед удалением.");
+            return new(EditStatus.StaleVersion, "Реплика или её связи уже изменились. Обновите контекст перед удалением.");
         if (await store.IsStartAsync(id, lineId, ct) || await store.HasIncomingAsync(id, lineId, ct))
             return new(EditStatus.Conflict, "Перенесите старт или измените входящие переходы перед удалением.");
 
@@ -145,7 +145,7 @@ public sealed class LineEditor(ILineStore store)
         var choice = await store.FindChoiceAsync(id, lineId, choiceId, ct);
         if (choice is null) return new(EditStatus.NotFound);
         if (version != EditVersions.Choice(choice.TargetLineId, choice.Text, choice.Position, choice.RequiredState, choice.NextState))
-            return new(EditStatus.Conflict, "Вариант ответа уже изменился. Обновите реплику перед удалением.");
+            return new(EditStatus.StaleVersion, "Вариант ответа уже изменился. Обновите реплику перед удалением.");
         await store.DeleteChoiceAsync(id, lineId, choiceId, ct);
         await transaction.CommitAsync(ct);
         return new(EditStatus.Saved);

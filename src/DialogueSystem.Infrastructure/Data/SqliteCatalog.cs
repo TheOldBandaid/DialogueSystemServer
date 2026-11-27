@@ -23,6 +23,20 @@ internal sealed class SqliteDialogueCatalog(DialogueDbContext db, GraphSnapshots
                 dialogue.Lines.Count(line => line.IsStoryBranch), dialogue.Lines.Count(line => line.IsEnding)))
             .ToListAsync(ct);
 
+    public async Task<LineResource?> FindLineAsync(int id, int lineId, CancellationToken ct)
+    {
+        var resource = await (from line in db.Lines
+            join dialogue in db.Dialogues on line.DialogueId equals dialogue.Id
+            where dialogue.Id == id && line.Id == lineId
+            select new
+            {
+                Line = new LineSummary(line.Id, line.Speaker.Name, line.Text, line.IsEnding, line.IsStoryBranch, line.SpeakerId),
+                dialogue.Revision
+            }).SingleOrDefaultAsync(ct);
+        return resource is null ? null : new(resource.Line,
+            EditVersions.LineDeletion(lineId, resource.Line.Version, resource.Revision));
+    }
+
     public Task<CatalogPage<DialogueOverview>> PageAsync(string? query, bool? hasStart, int? before, CancellationToken ct)
     {
         var selected = db.Dialogues.AsQueryable();
