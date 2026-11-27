@@ -82,6 +82,7 @@ export function initializeAccountAdministration() {
         currentPassword: current.value, temporaryPassword: temporary.value
       });
       reset.reset();
+      await loadAccounts();
       byId("status").textContent = `Пользователю «${account.login}» нужно войти с временным паролем и сменить его.`;
     });
     reset.append(current, temporary, submit);
