@@ -1,4 +1,6 @@
-import { api, byId, dialogueUrl, initializeWorkspace, run } from "./workspace.js";
+import { api } from "./http-client.js";
+import { byId, dialogueUrl, run } from "./ui.js";
+import { initializeWorkspace } from "./workspace.js";
 
 const host = byId("analysis");
 const id = Number(host.dataset.dialogueId);

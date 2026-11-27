@@ -10,7 +10,7 @@ namespace DialogueSystem.Web.Controllers;
 
 [ApiController]
 [Route("api/accounts")]
-public sealed class AccountsController(AccountService accounts, LoginProtection protection) : ControllerBase
+public sealed class AccountsController(IAccountService accounts, LoginProtection protection) : ControllerBase
 {
     [HttpGet("csrf")]
     public IActionResult Csrf(IAntiforgery antiforgery)
@@ -23,6 +23,7 @@ public sealed class AccountsController(AccountService accounts, LoginProtection 
     [ProducesResponseType(StatusCodes.Status200OK)]
     [EnableRateLimiting(LoginProtection.Policy)]
     [ValidateAntiForgeryToken]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
     public async Task<ActionResult<AccountSummary>> Login(LoginRequest request, CancellationToken cancellationToken)
     {
         using var lease = protection.Acquire(request.Login);
@@ -62,6 +63,7 @@ public sealed class AccountsController(AccountService accounts, LoginProtection 
     [ProducesResponseType(StatusCodes.Status201Created)]
     [Authorize(Roles = AccountRoles.Administrator)]
     [ValidateAntiForgeryToken]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<AccountSummary>> Create(
         CreateAccountRequest request, CancellationToken cancellationToken)
     {
@@ -77,6 +79,7 @@ public sealed class AccountsController(AccountService accounts, LoginProtection 
 
     [HttpGet("{id:int}")]
     [Authorize(Roles = AccountRoles.Administrator)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<AccountSummary>> Get(int id, CancellationToken cancellationToken)
     {
         var account = await accounts.GetSessionAsync(id, cancellationToken);
@@ -87,6 +90,9 @@ public sealed class AccountsController(AccountService accounts, LoginProtection 
     [ProducesResponseType(StatusCodes.Status204NoContent)]
     [Authorize(Roles = AccountRoles.Administrator)]
     [ValidateAntiForgeryToken]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status428PreconditionRequired)]
     public async Task<IActionResult> SetRole(int id, RoleRequest request, CancellationToken cancellationToken) =>
         request.Version is null ? VersionPreconditions.Missing() : await accounts.ChangeRoleAsync(SessionPrincipal.Session(User), id, request.Role, request.Version, cancellationToken) switch
         {
@@ -106,6 +112,7 @@ public sealed class AccountsController(AccountService accounts, LoginProtection 
     [EnableRateLimiting(LoginProtection.Policy)]
     [Authorize]
     [ValidateAntiForgeryToken]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> ChangePassword(PasswordRequest request, CancellationToken cancellationToken)
     {
         var change = await accounts.ChangePasswordAsync(
@@ -137,6 +144,8 @@ public sealed class AccountsController(AccountService accounts, LoginProtection 
     [EnableRateLimiting(LoginProtection.Policy)]
     [Authorize(Roles = AccountRoles.Administrator)]
     [ValidateAntiForgeryToken]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> ResetPassword(int id, ResetPasswordRequest request, CancellationToken ct) =>
         await accounts.ResetPasswordAsync(SessionPrincipal.UserId(User), id,
             request.CurrentPassword, request.TemporaryPassword, ct) switch

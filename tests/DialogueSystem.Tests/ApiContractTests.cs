@@ -60,9 +60,11 @@ public sealed class ApiContractTests
         Assert.Empty(page.Items.Select(item => item.Id).Intersect(next.Items.Select(item => item.Id)));
         var target = page.Items[0];
         var path = $"/api/accounts/{target.Id}/role";
-        await admin.Expect(HttpStatusCode.NoContent, HttpMethod.Put, path, new { role = AccountRoles.Administrator, target.Version });
-        await admin.Expect(HttpStatusCode.Conflict, HttpMethod.Put, path, new { role = AccountRoles.Editor, target.Version });
-        using (var missing = await admin.Send(HttpMethod.Put, path, new { role = AccountRoles.Editor }, includeVersion: false)) await Problem(missing, 428);
+        await admin.Expect(HttpStatusCode.NoContent, HttpMethod.Put, path,
+            new { role = AccountRoles.Administrator, target.Version });
+        await admin.Expect(HttpStatusCode.Conflict, HttpMethod.Put, path,
+            new { role = AccountRoles.Editor, target.Version });
+        using (var missing = await admin.Send(HttpMethod.Put, path, new { role = AccountRoles.Editor })) await Problem(missing, 428);
         Assert.Equal(AccountRoles.Administrator, (await admin.Get<AccountSummary>($"/api/accounts/{target.Id}")).Role);
     }
 

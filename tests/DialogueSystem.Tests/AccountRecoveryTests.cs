@@ -55,7 +55,7 @@ public sealed class AccountRecoveryTests
         await client.Login("editor", oldPassword);
         using (var scope = app.Services.CreateScope())
         {
-            var service = scope.ServiceProvider.GetRequiredService<AccountService>();
+            var service = scope.ServiceProvider.GetRequiredService<IAccountService>();
             Assert.False(await service.RecoverAdministratorAsync("absent", password, default));
             Assert.True(await service.RecoverAdministratorAsync("editor", password, default));
         }
@@ -76,7 +76,7 @@ public sealed class AccountRecoveryTests
         var before = await client.Get<AccountSummary>("/api/accounts/me");
         using (var scope = app.Services.CreateScope())
         {
-            var accounts = scope.ServiceProvider.GetRequiredService<AccountService>();
+            var accounts = scope.ServiceProvider.GetRequiredService<IAccountService>();
             await Assert.ThrowsAsync<ValidationException>(() => accounts.RecoverAdministratorAsync("editor", new string(' ', 12), default));
             Assert.NotNull(await accounts.AuthenticateAsync("editor", password, default));
         }

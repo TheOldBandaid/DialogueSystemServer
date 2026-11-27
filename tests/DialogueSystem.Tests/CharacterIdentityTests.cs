@@ -34,7 +34,8 @@ public sealed class CharacterIdentityTests
 
         var revision = await editor.Read<DialogueRevisionSummary>(HttpMethod.Post, path + "/revisions", Created,
             new { label = "До переименования" });
-        await editor.Expect(NoContent, HttpMethod.Put, $"/api/characters/{a.Id}", new { name = "Новое имя" });
+        await editor.Expect(NoContent, HttpMethod.Put, $"/api/characters/{a.Id}",
+            new { name = "Новое имя", version = (await editor.Get<CharacterSummary>($"/api/characters/{a.Id}")).Version });
         var restored = await editor.Read<DialogueSummary>(HttpMethod.Post,
             $"{path}/revisions/{revision.Id}/copy", Created);
         var lines = await editor.GetLines($"/api/dialogues/{restored.Id}/lines");
@@ -75,7 +76,8 @@ public sealed class CharacterIdentityTests
         var shared = await editor.Read<DialogueSummary>(HttpMethod.Post, path + "/copy", Created);
         var sharedLines = await editor.GetLines($"/api/dialogues/{shared.Id}/lines");
         Assert.Equal(new[] { a.Id, b.Id }, sharedLines.OrderBy(line => line.Id).Select(line => line.SpeakerId));
-        await editor.Expect(NoContent, HttpMethod.Put, $"/api/characters/{copied[0].SpeakerId}", new { name = "Имя в копии" });
+        await editor.Expect(NoContent, HttpMethod.Put, $"/api/characters/{copied[0].SpeakerId}",
+            new { name = "Имя в копии", version = (await editor.Get<CharacterSummary>($"/api/characters/{copied[0].SpeakerId}")).Version });
         Assert.All(await editor.GetLines(path + "/lines"), line => Assert.Equal("Тёзка", line.Speaker));
         var revision = await editor.Read<DialogueRevisionSummary>(HttpMethod.Post, path + "/revisions", Created, new { label = "Снимок" });
         var restored = await editor.Read<DialogueSummary>(HttpMethod.Post, $"{path}/revisions/{revision.Id}/copy", Created, input);

@@ -38,7 +38,7 @@ public sealed class ConcurrentEditingTests
         Assert.Equal("Новый ответ", (await b.Get<LineContext>(path + "/context")).Outgoing[0].Text);
 
         using var missing = await a.Send(HttpMethod.Put, path,
-            new { line.SpeakerId, text = "Без версии" }, includeVersion: false);
+            new { line.SpeakerId, text = "Без версии" });
         Assert.Equal((System.Net.HttpStatusCode)428, missing.StatusCode);
     }
 

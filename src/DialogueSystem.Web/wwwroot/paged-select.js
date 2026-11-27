@@ -1,4 +1,5 @@
-import { api, run } from "./workspace.js";
+import { api } from "./http-client.js";
+import { run } from "./ui.js";
 
 export function createPagedSelect({ select, search, more, endpoint, itemEndpoint, label,
   except = () => null, initialPage, selectedRecord, onChange }) {

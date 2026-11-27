@@ -13,6 +13,7 @@ namespace DialogueSystem.Web.Controllers;
 public sealed class DialogueRevisionsController(IDialogueRevisions revisions) : ControllerBase
 {
     [HttpGet]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<DialogueRevisionPage>> List(
         int id, [FromQuery, Range(1, int.MaxValue)] int? before, CancellationToken ct)
     {
@@ -22,6 +23,8 @@ public sealed class DialogueRevisionsController(IDialogueRevisions revisions) : 
 
     [HttpPost]
     [ProducesResponseType(StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<DialogueRevisionSummary>> Create(int id, RevisionInput input, CancellationToken ct)
     {
         try
@@ -36,6 +39,7 @@ public sealed class DialogueRevisionsController(IDialogueRevisions revisions) : 
     }
 
     [HttpGet("{revisionId:int}/export")]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<DialogueDocument>> Export(int id, int revisionId, CancellationToken ct)
     {
         var document = await revisions.ExportAsync(id, revisionId, ct);
@@ -44,6 +48,7 @@ public sealed class DialogueRevisionsController(IDialogueRevisions revisions) : 
 
     [HttpPost("{revisionId:int}/copy")]
     [ProducesResponseType(StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<DialogueSummary>> Copy(int id, int revisionId,
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] DialogueCopyInput? input, CancellationToken ct)
     {

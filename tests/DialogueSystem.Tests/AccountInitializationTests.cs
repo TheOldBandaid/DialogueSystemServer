@@ -12,7 +12,7 @@ public sealed class AccountInitializationTests
         using var data = new DialogueTestData();
         await using var app = data.Start();
         using var scope = app.Services.CreateScope();
-        var accounts = scope.ServiceProvider.GetRequiredService<AccountService>();
+        var accounts = scope.ServiceProvider.GetRequiredService<IAccountService>();
         Assert.True(File.Exists(data.DatabasePath));
         Assert.Equal(new(false, false, false), await accounts.InitialStatusAsync(default));
         var password = Guid.NewGuid().ToString("N");
@@ -29,7 +29,7 @@ public sealed class AccountInitializationTests
         await using var app = data.Start();
         const string password = "  password with spaces  ";
         using (var scope = app.Services.CreateScope())
-            Assert.True(await scope.ServiceProvider.GetRequiredService<AccountService>().EnsureAsync("editor", password, AccountRoles.Editor, default));
+            Assert.True(await scope.ServiceProvider.GetRequiredService<IAccountService>().EnsureAsync("editor", password, AccountRoles.Editor, default));
         using var client = new DialogueApiClient(app);
         await client.Login("editor", password);
         await client.Login("editor", password.Trim(), System.Net.HttpStatusCode.Unauthorized);

@@ -1,4 +1,5 @@
-import { api, byId, run } from "./workspace.js";
+import { api } from "./http-client.js";
+import { byId, run } from "./ui.js";
 
 export function initializeCleanup(path, cleaned = () => {}) {
   const panel = byId("cleanup-panel");

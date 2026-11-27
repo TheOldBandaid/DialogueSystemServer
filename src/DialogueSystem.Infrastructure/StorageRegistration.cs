@@ -21,14 +21,14 @@ public static class StorageRegistration
             .AddSingleton<ISessionEpoch>(services => services.GetRequiredService<SessionEpoch>())
             .AddSingleton<GraphSnapshots>()
             .AddDbContext<DialogueDbContext>(options => options.UseSqlite(connection.ToString()).AddInterceptors(new SqliteSearch()))
-            .AddScoped<IAccountStore, SqliteAccounts>()
+            .AddScoped<IAccountService, SqliteAccounts>()
             .AddScoped<IPasswordService, PasswordService>()
             .AddScoped<IDialogueCatalog, SqliteDialogueCatalog>()
             .AddScoped<IDialogueRevisions, SqliteRevisions>()
-            .AddScoped<IDialogueCleanupStore, SqliteCleanup>()
+            .AddScoped<IDialogueCleanup, SqliteCleanup>()
             .AddScoped<ICharacterCatalog, SqliteCharacterCatalog>()
-            .AddScoped<ILineStore, SqliteLines>()
-            .AddScoped<IPreviewStore, SqlitePreviews>();
+            .AddScoped<ILineEditor, SqliteLines>()
+            .AddScoped<IPreviewService, SqlitePreviews>();
     }
 
     public static async Task InitializeDialogueDatabaseAsync(

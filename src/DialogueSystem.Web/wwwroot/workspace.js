@@ -1,213 +1,37 @@
-export const byId = id => document.getElementById(id);
-const login = byId("login");
-const workspace = byId("workspace");
-const accountAdmin = byId("account-admin");
-const newAccountForm = byId("new-account");
-const passwordForm = byId("change-password");
-const roleLabels = { Editor: "Редактор", Administrator: "Администратор" };
-let token = "";
-let pendingOperations = 0;
-let signedInId;
-let accountsCursor;
-let accountsGeneration = 0;
-let accountsTimer;
-
-export async function api(path, method = "GET", body) {
-  const headers = method === "GET" ? {} : { "X-CSRF-TOKEN": token, "Content-Type": "application/json" };
-  if (method === "DELETE" && body?.version) {
-    headers["If-Match"] = `"${body.version}"`;
-    body = undefined;
-  }
-  const response = await fetch(path, {
-    method,
-    headers,
-    body: body === undefined ? undefined : JSON.stringify(body)
-  });
-  const result = response.headers.get("content-type")?.includes("json") ? await response.json() : null;
-  if (!response.ok) {
-    const validation = result?.errors;
-    const details = validation && Object.values(validation).flat().join(" ");
-    const message = response.status === 413 ? "Сервер отклонил запрос из-за ограничения размера данных." :
-      response.status === 401 ? "Проверьте имя пользователя и пароль или войдите заново." :
-      result?.detail || details || `Запрос отклонён (HTTP ${response.status}).`;
-    throw Object.assign(new Error(message), { status: response.status, result });
-  }
-  return result;
-}
-
-export function run(operation) {
-  return async event => {
-    event?.preventDefault();
-    pendingOperations++;
-    workspace.inert = true;
-    login.inert = true;
-    byId("logout").disabled = true;
-    byId("status").textContent = "";
-    try {
-      await operation(event);
-    } catch (error) {
-      if (error.status === 401) showLogin();
-      byId("status").textContent = error.message;
-    } finally {
-      pendingOperations--;
-      workspace.inert = pendingOperations > 0;
-      login.inert = pendingOperations > 0;
-      byId("logout").disabled = pendingOperations > 0;
-    }
-  };
-}
-
-async function refreshToken() {
-  token = (await api("/api/accounts/csrf")).token;
-}
-
-function showLogin() {
-  showAccountManagement(null);
-  passwordForm.reset();
-  byId("my-account").open = false;
-  workspace.hidden = true;
-  byId("logout").hidden = true;
-  login.hidden = false;
-}
-
-function showAccountManagement(profile) {
-  signedInId = profile?.id;
-  accountAdmin.hidden = profile?.role !== "Administrator";
-  if (accountAdmin.hidden) {
-    accountsGeneration++;
-    accountsCursor = null;
-    clearTimeout(accountsTimer);
-    accountAdmin.open = false;
-    newAccountForm.reset();
-    byId("accounts-list").replaceChildren();
-  }
-}
-
-async function accountRequest(route, method, body) {
-  try {
-    return await api(route, method, body);
-  } catch (error) {
-    if (error.status !== 403) throw error;
-    showAccountManagement(null);
-    throw new Error("Для управления ролями нужны права администратора.");
-  }
-}
-
-function accountRow(account) {
-  const row = document.createElement("li");
-  const form = document.createElement("form");
-  form.className = "actions account-role";
-  const label = document.createElement("label");
-  const loginName = document.createElement("span");
-  loginName.textContent = account.login;
-  const role = document.createElement("select");
-  role.setAttribute("aria-label", `Роль для ${account.login}`);
-  role.append(...Object.entries(roleLabels).map(([value, title]) => new Option(title, value)));
-  role.value = account.role;
-  label.append(loginName, role);
-  const save = document.createElement("button");
-  save.textContent = "Сохранить роль";
-  save.disabled = true;
-  role.onchange = () => { save.disabled = role.value === account.role; };
-
-  form.onsubmit = run(async () => {
-    await accountRequest(`/api/accounts/${account.id}/role`, "PUT", { role: role.value, version: account.version });
-    showAccountManagement(await api("/api/accounts/me"));
-    if (!accountAdmin.hidden) await loadAccounts();
-    byId("status").textContent = `Роль пользователя «${account.login}» обновлена.`;
-  });
-  form.append(label, save);
-  row.append(form);
-  const reset = document.createElement("form");
-  reset.className = "actions";
-  const current = document.createElement("input");
-  current.type = "password";
-  current.autocomplete = "current-password";
-  current.required = true;
-  current.maxLength = 512;
-  current.placeholder = "Пароль администратора";
-  current.setAttribute("aria-label", "Пароль администратора для сброса");
-  const temporary = document.createElement("input");
-  temporary.type = "password";
-  temporary.autocomplete = "new-password";
-  temporary.required = true;
-  temporary.minLength = 12;
-  temporary.maxLength = 512;
-  temporary.placeholder = "Временный пароль";
-  temporary.setAttribute("aria-label", `Временный пароль для ${account.login}`);
-  const submit = document.createElement("button");
-  submit.textContent = "Выдать временный пароль";
-  reset.onsubmit = run(async () => {
-    await accountRequest(`/api/accounts/${account.id}/password`, "POST", {
-      currentPassword: current.value, temporaryPassword: temporary.value
-    });
-    reset.reset();
-    byId("status").textContent = `Пользователю «${account.login}» нужно войти с временным паролем и сменить его.`;
-  });
-  reset.append(current, temporary, submit);
-  if (account.id !== signedInId) row.append(reset);
-  return row;
-}
-
-async function loadAccounts(before) {
-  const generation = before == null ? ++accountsGeneration : accountsGeneration;
-  const query = new URLSearchParams();
-  const text = byId("accounts-search")?.value.trim();
-  if (text) query.set("q", text);
-  if (before != null) query.set("before", before);
-  const page = await accountRequest(`/api/accounts?${query}`);
-  if (generation !== accountsGeneration || accountAdmin.hidden) return;
-  const rows = page.items.map(accountRow);
-  if (before == null) byId("accounts-list").replaceChildren(...rows);
-  else byId("accounts-list").append(...rows);
-  accountsCursor = page.nextBeforeId;
-  byId("accounts-more").hidden = accountsCursor == null;
-}
-
-const refreshAccounts = run(() => loadAccounts());
-accountAdmin.ontoggle = () => {
-  if (accountAdmin.open && !accountAdmin.hidden) refreshAccounts();
-};
-byId("refresh-accounts").onclick = refreshAccounts;
-if (byId("accounts-more")) byId("accounts-more").onclick = run(() => accountsCursor == null ? undefined : loadAccounts(accountsCursor));
-if (byId("accounts-search")) byId("accounts-search").oninput = () => {
-  accountsGeneration++;
-  clearTimeout(accountsTimer);
-  accountsTimer = setTimeout(refreshAccounts, 250);
-};
-newAccountForm.onsubmit = run(async () => {
-  const input = Object.fromEntries(new FormData(newAccountForm));
-  const account = await accountRequest("/api/accounts", "POST", input);
-  newAccountForm.reset();
-  await loadAccounts();
-  byId("status").textContent = `Пользователь «${account.login}» создан.`;
-});
-passwordForm.onsubmit = run(async () => {
-  const { currentPassword, newPassword, confirmation } = Object.fromEntries(new FormData(passwordForm));
-  if (newPassword !== confirmation) throw new Error("Новые пароли не совпадают.");
-  if (!document.dispatchEvent(new Event("workspace:beforeleave", { cancelable: true }))) return;
-
-  await api("/api/accounts/me/password", "PUT", { currentPassword, newPassword });
-  showLogin();
-  byId("status").textContent = "Пароль изменён. Войдите с новым паролем.";
-});
-
-export const dialogueUrl = id => `/dialogues/${id}`;
-
-export function downloadJson(data, name) {
-  const file = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(file);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = name;
-  link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 0);
-}
+import { api, refreshToken } from "./http-client.js";
+import { byId, run, setUnauthorizedHandler } from "./ui.js";
+import { initializeAccountAdministration } from "./account-admin.js";
 
 export async function initializeWorkspace(loadPage) {
+  const login = byId("login");
+  const workspace = byId("workspace");
+  const passwordForm = byId("change-password");
+  const administration = initializeAccountAdministration();
+  setUnauthorizedHandler(showLogin);
+
+  function showLogin() {
+    administration.show(null);
+    passwordForm.reset();
+    byId("my-account").open = false;
+    workspace.hidden = true;
+    byId("logout").hidden = true;
+    login.hidden = false;
+  }
+
+  passwordForm.onsubmit = run(async () => {
+    const { currentPassword, newPassword, confirmation } = Object.fromEntries(new FormData(passwordForm));
+    if (newPassword !== confirmation) throw new Error("Новые пароли не совпадают.");
+    if (!document.dispatchEvent(new Event("workspace:beforeleave", { cancelable: true }))) return;
+
+    await api("/api/accounts/me/password", "PUT", { currentPassword, newPassword });
+    showLogin();
+    byId("status").textContent = "Пароль изменён. Войдите с новым паролем.";
+  });
+
+
   async function showWorkspace(profile) {
     const mustChange = profile.mustChangePassword === true;
-    showAccountManagement(mustChange ? null : profile);
+    administration.show(mustChange ? null : profile);
     byId("page-content").hidden = mustChange;
     if (mustChange) {
       byId("my-account").open = true;

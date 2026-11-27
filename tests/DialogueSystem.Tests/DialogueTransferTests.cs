@@ -61,7 +61,7 @@ public sealed class DialogueTransferTests
         Assert.Equal(copy.StartLineId, preview.Line.Id);
         var copyStart = Assert.Single(copy.Lines, line => line.Id == copy.StartLineId);
         await editor.Expect(NoContent, HttpMethod.Put, $"{copyPath}/lines/{copyStart.Id}",
-            new { speakerId = preview.Line.SpeakerId, text = "Новый текст копии" });
+            new { speakerId = preview.Line.SpeakerId, text = "Новый текст копии", version = (await editor.Get<LineSummary>($"{copyPath}/lines/{copyStart.Id}")).Version });
         var unchanged = await editor.Get<DialogueDocument>(exportPath);
         Assert.Equal(document.Lines.ToArray(), unchanged.Lines.ToArray());
         Assert.Equal(document.Choices.ToArray(), unchanged.Choices.ToArray());

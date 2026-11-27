@@ -9,15 +9,19 @@ namespace DialogueSystem.Web.Controllers;
 [Authorize]
 [AutoValidateAntiforgeryToken]
 [Route("api/dialogues/{id:int}/cleanup")]
-public sealed class DialogueCleanupController(DialogueCleanupService cleanup) : ControllerBase
+public sealed class DialogueCleanupController(IDialogueCleanup cleanup) : ControllerBase
 {
     [HttpPost("plan")]
     [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IActionResult> Plan(int id, CleanupCriteria criteria, CancellationToken ct) =>
         Result(await cleanup.PlanAsync(id, SessionPrincipal.UserId(User), criteria, ct));
 
     [HttpPost]
     [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status428PreconditionRequired)]
     public async Task<IActionResult> Apply(int id, CleanupInput input, CancellationToken ct)
     {
         if (input.ConfirmationToken is null)

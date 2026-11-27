@@ -46,34 +46,15 @@ internal sealed class ApiOperationTransformer : IOpenApiOperationTransformer
         if (authenticated) Response("401", "Требуется вход; HTTP-перенаправление не выполняется.");
         if (authenticated) Response("403", "Недостаточно прав или необходимо сменить временный пароль.");
         if (mutation) Response("400", "Некорректный ввод или отсутствует/неверен X-CSRF-TOKEN.");
-        var route = context.Description.RelativePath ?? "";
-        if (route.Contains("{id}", StringComparison.Ordinal))
-            Response("404", "Объект не найден в указанном родительском ресурсе или недоступен этому пользователю.");
-        if (metadata.OfType<EnableRateLimitingAttribute>().Any()) Response("429", "Превышено число попыток; время повтора указано в Retry-After.");
-        if (route.EndsWith("/login", StringComparison.Ordinal)) Response("401", "Неверные учётные данные.");
-        var bodyVersion = context.Description.HttpMethod == "PUT" && !route.EndsWith("/me/password", StringComparison.Ordinal) ||
-            route.EndsWith("/reassign", StringComparison.Ordinal) || route.EndsWith("/cleanup", StringComparison.Ordinal) && mutation ||
-            route.EndsWith("/context", StringComparison.Ordinal);
-        if (bodyVersion)
-        {
-            Response("409", "Версия в теле запроса или курсор устарели. Перечитайте данные перед повтором.");
-            Response("428", "Передайте обязательную версию или токен подтверждения действия.");
-        }
-        if (mutation && (route.Contains("/previews", StringComparison.Ordinal) || route.EndsWith("/move", StringComparison.Ordinal) ||
-            route.EndsWith("/revisions", StringComparison.Ordinal) || route.Contains("/choices", StringComparison.Ordinal) ||
-            route is "api/accounts" or "api/accounts/me/password" || route.EndsWith("/password", StringComparison.Ordinal)))
-            Response("409", "Конфликт текущего состояния: проверьте detail и перечитайте данные.");
-        if (route.EndsWith("/map", StringComparison.Ordinal) || mutation && route.Contains("/previews", StringComparison.Ordinal))
-            Response("422", "Граф или условия начала прохождения не позволяют выполнить действие.");
+        if (metadata.OfType<EnableRateLimitingAttribute>().Any())
+            Response("429", "Превышено число попыток; время повтора указано в Retry-After.");
         if (authorization.Any(item => !string.IsNullOrEmpty(item.Roles)))
             operation.Description = (operation.Description ?? "") + " Требуемые роли: " + string.Join(", ", authorization.Select(item => item.Roles).Where(role => !string.IsNullOrEmpty(role))) + ".";
-        if (context.Description.HttpMethod == "DELETE")
+        var version = operation.Parameters?.FirstOrDefault(parameter => parameter.Name == "If-Match");
+        if (version is OpenApiParameter header)
         {
-            Response("412", "If-Match устарел. Получите данные заново и подтвердите удаление.");
-            Response("428", "Передайте If-Match с текущей версией объекта.");
-            Response("409", "Объект используется: сначала измените связанные данные.");
-            var version = operation.Parameters?.FirstOrDefault(parameter => parameter.Name == "If-Match");
-            if (version is OpenApiParameter header) { header.Required = true; header.Description = "Один текущий ETag в двойных кавычках. Без wildcard, слабых ETag и списков."; }
+            header.Required = true;
+            header.Description = "Один текущий ETag в двойных кавычках. Без wildcard, слабых ETag и списков.";
         }
         return Task.CompletedTask;
     }

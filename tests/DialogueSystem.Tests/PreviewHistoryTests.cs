@@ -37,8 +37,10 @@ public sealed class PreviewHistoryTests
                 payload: new SelectChoice(first.Choices[0].Id, 0));
             historyRoute = $"{route}/previews/{first.PreviewId}/history";
             saved = await editor.Get<PreviewHistory>(historyRoute);
-            await editor.Expect(NoContent, HttpMethod.Delete, $"{route}/lines/{first.Line.Id}/choices/{first.Choices[0].Id}");
-            await editor.Expect(NoContent, HttpMethod.Delete, $"{route}/lines/{current.Line.Id}");
+            await editor.Expect(NoContent, HttpMethod.Delete, $"{route}/lines/{first.Line.Id}/choices/{first.Choices[0].Id}",
+            ifMatch: (await editor.Get<ChoiceSummary>($"{route}/lines/{first.Line.Id}/choices/{first.Choices[0].Id}")).Version);
+            await editor.Expect(NoContent, HttpMethod.Delete, $"{route}/lines/{current.Line.Id}",
+            ifMatch: (await editor.Get<LineContext>($"{route}/lines/{current.Line.Id}" + "/context")).DeleteVersion);
             Assert.Equal(saved.Steps.ToArray(), (await editor.Get<PreviewHistory>(historyRoute)).Steps.ToArray());
             Assert.Single(await editor.GetPreviews(route + "/previews"));
             await editor.Expect(Conflict, HttpMethod.Post, $"{route}/previews/{first.PreviewId}/choices",
@@ -49,7 +51,8 @@ public sealed class PreviewHistoryTests
         {
             await editor.Login("editor", editorPassword);
             Assert.Equal(saved.Steps.ToArray(), (await editor.Get<PreviewHistory>(historyRoute)).Steps.ToArray());
-            await editor.Expect(NoContent, HttpMethod.Delete, route);
+            await editor.Expect(NoContent, HttpMethod.Delete, route,
+            ifMatch: (await editor.Get<DialogueSummary>(route)).DeleteVersion);
             await editor.Expect(NotFound, HttpMethod.Get, historyRoute);
         }
     }
@@ -99,10 +102,10 @@ public sealed class PreviewHistoryTests
             await admin.Expect(NotFound, HttpMethod.Get, historyPath);
             await editor.Expect(NotFound, HttpMethod.Get, $"{Dialogues}/0/previews/{start.PreviewId}/history");
 
-            var newChoice = new { text = "Новая формулировка", targetLineId = next.Line.Id, position = 1 };
+            var newChoice = new { text = "Новая формулировка", targetLineId = next.Line.Id, position = 1, version = (await editor.Get<ChoiceSummary>($"{path}/lines/{start.Line.Id}/choices/{selected.Id}")).Version };
             await editor.Expect(NoContent, HttpMethod.Put, $"{path}/lines/{start.Line.Id}/choices/{selected.Id}", newChoice);
             await editor.Expect(NoContent, HttpMethod.Put, $"{path}/lines/{next.Line.Id}",
-                new { next.Line.SpeakerId, text = "Новый текст реплики" });
+            new { next.Line.SpeakerId, text = "Новый текст реплики", version = (await editor.Get<LineSummary>($"{path}/lines/{next.Line.Id}")).Version });
         }
 
         await using (var app = data.Start(settings: [new("DialogueSystem:EditorPassword", editorPassword)]))

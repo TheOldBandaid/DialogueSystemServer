@@ -3,11 +3,7 @@ import assert from "node:assert/strict";
 import { JSDOM } from "jsdom";
 
 test("paged selectors keep an off-page selection and ignore late or detached responses", async () => {
-  const dom = new JSDOM(`<form id="login"></form><div id="workspace"></div>
-    <details id="account-admin"></details><form id="new-account"></form><form id="change-password"></form>
-    <details id="my-account"></details><ul id="accounts-list"></ul><button id="refresh-accounts"></button>
-    <p id="status"></p><button id="logout"></button>
-    <div id="picker"><select></select><input type="search"><button></button></div>`, { url: "https://example.test" });
+  const dom = new JSDOM(`    <div id="picker"><select></select><input type="search"><button></button></div>`, { url: "https://example.test" });
   globalThis.document = dom.window.document;
   globalThis.window = dom.window;
   globalThis.location = dom.window.location;

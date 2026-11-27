@@ -42,7 +42,7 @@ internal static class SessionPrincipal
             return;
         }
 
-        var accounts = context.HttpContext.RequestServices.GetRequiredService<AccountService>();
+        var accounts = context.HttpContext.RequestServices.GetRequiredService<IAccountService>();
         var epoch = context.HttpContext.RequestServices.GetRequiredService<ISessionEpoch>();
         var session = await accounts.GetSessionAsync(id, context.HttpContext.RequestAborted);
         var version = principal.FindFirstValue(VersionClaim) ?? "0";

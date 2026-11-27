@@ -1,4 +1,4 @@
-import { byId, run } from "./workspace.js";
+import { byId, run } from "./ui.js";
 import { nodeWidth, nodeHeight, layoutMap, edgePoints, createSpatialIndex, edgeBounds, nodeBounds } from "./dialogue-map-layout.js";
 
 function drawEdge(context, edge, selected) {

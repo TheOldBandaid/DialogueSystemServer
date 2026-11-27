@@ -17,6 +17,7 @@ public sealed class CharactersController(ICharacterCatalog catalog) : Controller
         catalog.PageAsync(q, before, except, ct);
 
     [HttpGet("{id:int}")]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<CharacterSummary>> Get(int id, CancellationToken cancellationToken)
     {
         var character = await catalog.FindAsync(id, cancellationToken);
@@ -34,6 +35,7 @@ public sealed class CharactersController(ICharacterCatalog catalog) : Controller
     }
 
     [HttpGet("{id:int}/usage")]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<CharacterUsage>> Usage(int id, CancellationToken cancellationToken,
         [FromQuery, Range(1, int.MaxValue)] int? before = null)
     {
@@ -43,12 +45,18 @@ public sealed class CharactersController(ICharacterCatalog catalog) : Controller
 
     [HttpPut("{id:int}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status428PreconditionRequired)]
     public async Task<IActionResult> Update(int id, CharacterInput input, CancellationToken cancellationToken) =>
         input.Version is null ? VersionPreconditions.Missing() :
             VersionPreconditions.Result(await catalog.RenameAsync(id, input.Name, input.Version, cancellationToken));
 
     [HttpPost("{id:int}/reassign")]
     [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status428PreconditionRequired)]
     public async Task<ActionResult<ReassignedLines>> Reassign(
         int id, ReassignmentInput input, CancellationToken cancellationToken)
     {
@@ -68,6 +76,10 @@ public sealed class CharactersController(ICharacterCatalog catalog) : Controller
 
     [HttpDelete("{id:int}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status412PreconditionFailed)]
+    [ProducesResponseType(StatusCodes.Status428PreconditionRequired)]
     public async Task<IActionResult> Delete(int id, [FromHeader(Name = "If-Match")] string? version, CancellationToken cancellationToken)
     {
         var error = VersionPreconditions.Header(version, out var expected);

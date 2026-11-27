@@ -19,7 +19,7 @@ internal static class MaintenanceCommands
 
     private static async Task<int> RunCoreAsync(string command, IServiceProvider services, IConfiguration configuration)
     {
-        var accounts = services.GetRequiredService<AccountService>();
+        var accounts = services.GetRequiredService<IAccountService>();
         switch (command)
         {
             case "accounts-status":

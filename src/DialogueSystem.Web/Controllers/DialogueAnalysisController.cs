@@ -11,19 +11,18 @@ namespace DialogueSystem.Web.Controllers;
 public sealed class DialogueAnalysisController(IDialogueCatalog catalog) : ControllerBase
 {
     [HttpGet]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<DialogueAnalysisReport>> Report(int id, CancellationToken ct)
     {
-        var document = await catalog.ExportAsync(id, ct);
-        return document is null ? NotFound() : Ok(DialogueRouteAnalysis.Analyze(document, ct));
+        var report = await catalog.AnalyzeAsync(id, ct);
+        return report is null ? NotFound() : Ok(report);
     }
 
     [HttpGet("endings/{endingId:int:min(1)}")]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<DialogueRouteResult>> Ending(int id, int endingId, CancellationToken ct)
     {
-        var document = await catalog.ExportAsync(id, ct);
-        if (document is null || !document.Lines.Any(line => line.Id == endingId && line.IsEnding))
-            return NotFound();
-
-        return Ok(DialogueRouteAnalysis.FindShortestRoute(document, endingId, ct));
+        var route = await catalog.FindShortestRouteAsync(id, endingId, ct);
+        return route is null ? NotFound() : Ok(route);
     }
 }

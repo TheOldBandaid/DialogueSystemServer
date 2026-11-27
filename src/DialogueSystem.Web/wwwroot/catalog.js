@@ -1,4 +1,6 @@
-import { api, byId, dialogueUrl, initializeWorkspace, run } from "./workspace.js";
+import { api } from "./http-client.js";
+import { byId, dialogueUrl, run } from "./ui.js";
+import { initializeWorkspace } from "./workspace.js";
 
 const filters = byId("catalog-filters");
 const items = byId("catalog-items");

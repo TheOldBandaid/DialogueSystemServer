@@ -30,11 +30,7 @@ test("spatial index matches visible nodes at both ends of a 5000-line graph", ()
 });
 
 test("large maps render a bounded viewport and can select a node outside the DOM", async () => {
-  const dom = new JSDOM(`<form id="login"></form><div id="workspace"></div>
-    <details id="account-admin"></details><form id="new-account"></form><form id="change-password"></form>
-    <details id="my-account"></details><ul id="accounts-list"></ul><button id="refresh-accounts"></button>
-    <p id="status"></p><button id="logout"></button>
-    <details id="map-panel" open><div id="map-content"><p id="map-status"></p>
+  const dom = new JSDOM(`    <details id="map-panel" open><div id="map-content"><p id="map-status"></p>
       <div id="map-viewport"><canvas id="map-edges"></canvas><div id="map-nodes"></div></div>
       <div id="map-selection"><p id="map-selected-title"></p><ul id="map-incoming"></ul><ul id="map-outgoing"></ul></div>
     </div></details><button id="map-center"></button><a id="show-map"></a>`, { url: "https://example.test" });

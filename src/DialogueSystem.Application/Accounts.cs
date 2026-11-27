@@ -32,142 +32,16 @@ public interface IPasswordService
     bool Verify(Account account, string password);
 }
 
-public interface IAccountStore
+public interface IAccountService
 {
-    Task<Account?> FindByLoginAsync(string login, CancellationToken ct);
-    Task<Account?> FindByIdAsync(int id, CancellationToken ct);
+    Task<AccountSession?> AuthenticateAsync(string login, string password, CancellationToken ct);
     Task<AccountSession?> GetSessionAsync(int id, CancellationToken ct);
     Task<CatalogPage<AccountSummary>> PageAsync(string? query, int? before, CancellationToken ct);
     Task<InitialAccountsStatus> InitialStatusAsync(CancellationToken ct);
-    Task<IStorageTransaction> BeginAsync(CancellationToken ct);
-    Task AddAsync(Account account, CancellationToken ct);
-    Task<bool> HasOtherAdministratorAsync(int id, CancellationToken ct);
-    Task SetRoleAsync(int id, string role, CancellationToken ct);
-    Task<bool> ChangePasswordAsync(int id, int version, string hash, CancellationToken ct, bool mustChange = false);
-}
-
-public sealed class AccountService(IAccountStore store, IPasswordService passwords)
-{
-    public async Task<AccountSession?> AuthenticateAsync(string login, string password, CancellationToken ct)
-    {
-        var account = await store.FindByLoginAsync(AccountRules.NormalizeLogin(login), ct);
-        if (account is null || !passwords.Verify(account, password))
-            return null;
-
-        return new(account.Id, account.Login, account.Role, account.SessionVersion, account.MustChangePassword);
-    }
-
-    public Task<AccountSession?> GetSessionAsync(int id, CancellationToken ct) => store.GetSessionAsync(id, ct);
-
-    public Task<CatalogPage<AccountSummary>> PageAsync(string? query, int? before, CancellationToken ct) => store.PageAsync(query, before, ct);
-
-    public Task<InitialAccountsStatus> InitialStatusAsync(CancellationToken ct) => store.InitialStatusAsync(ct);
-
-    public async Task<bool> EnsureAsync(string login, string password, string role, CancellationToken ct)
-    {
-        if (await store.FindByLoginAsync(AccountRules.NormalizeLogin(login), ct) is not null)
-            return false;
-        return (await CreateAccountAsync(null, login, password, role, ct)).Status == AccountCreationStatus.Created;
-    }
-
-    public Task<AccountCreation> CreateAsync(AccountSession administrator, string login, string password, string role, CancellationToken ct) =>
-        CreateAccountAsync(administrator, login, password, role, ct);
-
-    private async Task<AccountCreation> CreateAccountAsync(AccountSession? administrator, string login, string password, string role, CancellationToken ct)
-    {
-        var normalized = AccountRules.NormalizeLogin(login);
-        AccountRules.Validate(normalized, password, role);
-        var account = new Account { Login = normalized, Role = role, PasswordHash = "" };
-        account.PasswordHash = passwords.Hash(account, password);
-
-        await using var transaction = await store.BeginAsync(ct);
-        if (administrator is not null && !await IsCurrentAdministratorAsync(administrator, ct))
-            return new(AccountCreationStatus.Forbidden);
-        if (await store.FindByLoginAsync(account.Login, ct) is not null)
-            return new(AccountCreationStatus.DuplicateLogin);
-
-        await store.AddAsync(account, ct);
-        await transaction.CommitAsync(ct);
-        return new(AccountCreationStatus.Created, new(account.Id, account.Login, account.Role));
-    }
-
-    public async Task<RoleChange> ChangeRoleAsync(AccountSession administrator, int id, string role, string version, CancellationToken ct)
-    {
-        AccountRules.ValidateRole(role);
-        await using var transaction = await store.BeginAsync(ct);
-        if (!await IsCurrentAdministratorAsync(administrator, ct)) return RoleChange.Forbidden;
-        var account = await store.GetSessionAsync(id, ct);
-        if (account is null)
-            return RoleChange.NotFound;
-        if (version != account.Summary.Version) return RoleChange.StaleAccount;
-
-        if (account.Role == AccountRoles.Administrator && role == AccountRoles.Editor &&
-            !await store.HasOtherAdministratorAsync(id, ct))
-            return RoleChange.LastAdministrator;
-
-        await store.SetRoleAsync(id, role, ct);
-        await transaction.CommitAsync(ct);
-        return RoleChange.Changed;
-    }
-
-    private async Task<bool> IsCurrentAdministratorAsync(AccountSession administrator, CancellationToken ct)
-    {
-        var current = await store.GetSessionAsync(administrator.Id, ct);
-        return administrator.Role == AccountRoles.Administrator && !administrator.MustChangePassword &&
-            current is { Role: AccountRoles.Administrator, MustChangePassword: false } &&
-            current.Version == administrator.Version;
-    }
-
-    public async Task<PasswordChange> ChangePasswordAsync(
-        int id, string currentPassword, string newPassword, CancellationToken ct)
-    {
-        AccountRules.ValidatePassword(newPassword);
-        var account = await store.FindByIdAsync(id, ct);
-        if (account is null || !passwords.Verify(account, currentPassword))
-            return PasswordChange.WrongPassword;
-
-        if (string.Equals(currentPassword, newPassword, StringComparison.Ordinal))
-            return PasswordChange.SamePassword;
-
-        var hash = passwords.Hash(account, newPassword);
-        return await store.ChangePasswordAsync(id, account.SessionVersion, hash, ct)
-            ? PasswordChange.Changed
-            : PasswordChange.StaleAccount;
-    }
-
-    public async Task<PasswordReset> ResetPasswordAsync(int administratorId, int targetId,
-        string currentPassword, string temporaryPassword, CancellationToken ct)
-    {
-        AccountRules.ValidatePassword(temporaryPassword);
-        var administrator = await store.FindByIdAsync(administratorId, ct);
-        if (administrator is null || administrator.Role != AccountRoles.Administrator || administrator.MustChangePassword)
-            return PasswordReset.Forbidden;
-        if (!passwords.Verify(administrator, currentPassword)) return PasswordReset.WrongPassword;
-        if (administratorId == targetId) return PasswordReset.OwnAccount;
-        var account = await store.FindByIdAsync(targetId, ct);
-        if (account is null) return PasswordReset.NotFound;
-        var hash = passwords.Hash(account, temporaryPassword);
-        await using var transaction = await store.BeginAsync(ct);
-        var currentAdministrator = await store.GetSessionAsync(administratorId, ct);
-        if (currentAdministrator is null || currentAdministrator.Role != AccountRoles.Administrator ||
-            currentAdministrator.MustChangePassword || currentAdministrator.Version != administrator.SessionVersion)
-            return PasswordReset.Forbidden;
-        if (!await store.ChangePasswordAsync(targetId, account.SessionVersion, hash, ct, mustChange: true))
-            return PasswordReset.StaleAccount;
-        await transaction.CommitAsync(ct);
-        return PasswordReset.Changed;
-    }
-
-    public async Task<bool> RecoverAdministratorAsync(string login, string newPassword, CancellationToken ct)
-    {
-        AccountRules.ValidatePassword(newPassword);
-        var account = await store.FindByLoginAsync(AccountRules.NormalizeLogin(login), ct);
-        if (account is null) return false;
-        var hash = passwords.Hash(account, newPassword);
-        await using var transaction = await store.BeginAsync(ct);
-        if (!await store.ChangePasswordAsync(account.Id, account.SessionVersion, hash, ct)) return false;
-        await store.SetRoleAsync(account.Id, AccountRoles.Administrator, ct);
-        await transaction.CommitAsync(ct);
-        return true;
-    }
+    Task<bool> EnsureAsync(string login, string password, string role, CancellationToken ct);
+    Task<AccountCreation> CreateAsync(AccountSession administrator, string login, string password, string role, CancellationToken ct);
+    Task<RoleChange> ChangeRoleAsync(AccountSession administrator, int id, string role, string version, CancellationToken ct);
+    Task<PasswordChange> ChangePasswordAsync(int id, string currentPassword, string newPassword, CancellationToken ct);
+    Task<PasswordReset> ResetPasswordAsync(int administratorId, int targetId, string currentPassword, string temporaryPassword, CancellationToken ct);
+    Task<bool> RecoverAdministratorAsync(string login, string newPassword, CancellationToken ct);
 }

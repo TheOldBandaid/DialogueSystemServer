@@ -10,9 +10,10 @@ namespace DialogueSystem.Web.Controllers;
 [Authorize]
 [AutoValidateAntiforgeryToken]
 [Route("api/dialogues/{id:int}")]
-public sealed class DialogueLinesController(LineEditor editor) : ControllerBase
+public sealed class DialogueLinesController(ILineEditor editor) : ControllerBase
 {
     [HttpGet("lines/{lineId:int}")]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<LineSummary>> GetLine(int id, int lineId, CancellationToken ct)
     {
         var resource = await editor.ReadAsync(id, lineId, ct);
@@ -22,6 +23,9 @@ public sealed class DialogueLinesController(LineEditor editor) : ControllerBase
     }
 
     [HttpGet("lines/{lineId:int}/context")]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status428PreconditionRequired)]
     public async Task<ActionResult<LineContext>> Context(int id, int lineId, CancellationToken cancellationToken,
         [FromQuery, Range(1, int.MaxValue)] int? outgoingAfter = null,
         [FromQuery, Range(1, int.MaxValue)] int? incomingAfterLine = null,
@@ -38,6 +42,7 @@ public sealed class DialogueLinesController(LineEditor editor) : ControllerBase
     }
 
     [HttpGet("lines/{lineId:int}/choices/{choiceId:int}")]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<ChoiceSummary>> GetChoice(int id, int lineId, int choiceId, CancellationToken ct)
     {
         var choice = await editor.FindChoiceAsync(id, lineId, choiceId, ct);
@@ -46,6 +51,7 @@ public sealed class DialogueLinesController(LineEditor editor) : ControllerBase
         return Ok(choice);
     }
     [HttpGet("lines")]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<CatalogPage<LineReference>>> Page(int id,
         [FromQuery, StringLength(CatalogLimits.SearchLength)] string? q,
         [FromQuery, Range(1, int.MaxValue)] int? before, bool branchesOnly, CancellationToken ct)
@@ -55,21 +61,30 @@ public sealed class DialogueLinesController(LineEditor editor) : ControllerBase
     }
     [HttpPost("lines")]
     [ProducesResponseType(StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<ActionResult<LineSummary>> Create(int id, LineInput input, CancellationToken ct)
     {
         var result = await editor.CreateAsync(id, input.ToChange(), ct);
-        return result.NewLine is { } line
+        return result.Value is { } line
             ? CreatedAtAction(nameof(GetLine), new { id, lineId = line.Id }, line)
             : VersionPreconditions.Result(result);
     }
 
     [HttpPut("lines/{lineId:int}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status428PreconditionRequired)]
     public async Task<IActionResult> Update(int id, int lineId, LineInput input, CancellationToken ct) =>
         input.Version is null ? VersionPreconditions.Missing() : VersionPreconditions.Result(await editor.UpdateAsync(id, lineId, input.ToChange(), ct));
 
     [HttpDelete("lines/{lineId:int}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status412PreconditionFailed)]
+    [ProducesResponseType(StatusCodes.Status428PreconditionRequired)]
     public async Task<IActionResult> Delete(int id, int lineId, [FromHeader(Name = "If-Match")] string? version, CancellationToken ct)
     {
         var error = VersionPreconditions.Header(version, out var expected);
@@ -78,21 +93,29 @@ public sealed class DialogueLinesController(LineEditor editor) : ControllerBase
 
     [HttpPost("lines/{lineId:int}/choices")]
     [ProducesResponseType(StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> CreateChoice(int id, int lineId, ChoiceInput input, CancellationToken ct)
     {
         var result = await editor.SaveChoiceAsync(id, lineId, null, input.ToChange(), ct);
-        return result.NewChoice is { } choice
+        return result.Value is { } choice
             ? CreatedAtAction(nameof(GetChoice), new { id, lineId, choiceId = choice.Id }, choice)
             : VersionPreconditions.Result(result);
     }
 
     [HttpPut("lines/{lineId:int}/choices/{choiceId:int}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status428PreconditionRequired)]
     public async Task<IActionResult> UpdateChoice(int id, int lineId, int choiceId, ChoiceInput input, CancellationToken ct) =>
         input.Version is null ? VersionPreconditions.Missing() : VersionPreconditions.Result(await editor.SaveChoiceAsync(id, lineId, choiceId, input.ToChange(), ct));
 
     [HttpDelete("lines/{lineId:int}/choices/{choiceId:int}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status412PreconditionFailed)]
+    [ProducesResponseType(StatusCodes.Status428PreconditionRequired)]
     public async Task<IActionResult> DeleteChoice(int id, int lineId, int choiceId,
         [FromHeader(Name = "If-Match")] string? version, CancellationToken ct)
     {
@@ -102,6 +125,8 @@ public sealed class DialogueLinesController(LineEditor editor) : ControllerBase
 
     [HttpPost("lines/{lineId:int}/choices/{choiceId:int}/move")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
     public async Task<IActionResult> MoveChoice(int id, int lineId, int choiceId, MoveChoiceInput input, CancellationToken ct) =>
         VersionPreconditions.Result(await editor.MoveChoiceAsync(id, lineId, choiceId, input.Direction, input.Version, ct));
 

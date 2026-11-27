@@ -11,6 +11,7 @@ export function createDraftGuard(root) {
   }
 
   function watch(form) { baselines.set(form, snapshot(form)); }
+  function forget(form) { baselines.delete(form); }
   function reset(...forms) {
     baselines.clear();
     forms.forEach(watch);
@@ -38,5 +39,5 @@ export function createDraftGuard(root) {
     if (!confirmDiscard()) event.preventDefault();
     else reset();
   });
-  return { watch, reset, hasChanges, confirmDiscard };
+  return { watch, forget, reset, hasChanges, confirmDiscard };
 }

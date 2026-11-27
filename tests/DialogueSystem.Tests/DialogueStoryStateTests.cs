@@ -42,7 +42,8 @@ public sealed class DialogueStoryStateTests
         var context = await editor.Get<LineContext>($"{route}/lines/{shared.Line.Id}/context");
         Assert.Equal(2, context.Outgoing.Count);
         var unavailable = Assert.Single(context.Outgoing, choice => choice.RequiredState != state);
-        await editor.Expect(BadRequest, HttpMethod.Post, advance, new SelectChoice(unavailable.Id, shared.Step));
+        await editor.Expect(BadRequest, HttpMethod.Post, advance,
+            new SelectChoice(unavailable.Id, shared.Step));
         var permitted = Assert.Single(shared.Choices);
         Assert.Equal(availableAnswer, permitted.Text);
         var final = await editor.Read<PreviewStep>(HttpMethod.Post, advance, payload: new SelectChoice(permitted.Id, shared.Step));
@@ -81,7 +82,7 @@ public sealed class DialogueStoryStateTests
         var context = await editor.Get<LineContext>($"{route}/lines/{shared.Id}/context");
         var answer = Assert.Single(context.Outgoing, choice => choice.RequiredState == "потеряно");
         await editor.Expect(NoContent, HttpMethod.Put, $"{route}/lines/{shared.Id}/choices/{answer.Id}",
-            new { targetLineId = answer.Line.Id, answer.Text, answer.Position, requiredState = " тайна " });
+            new { targetLineId = answer.Line.Id, answer.Text, answer.Position, requiredState = " тайна ", version = (await editor.Get<ChoiceSummary>($"{route}/lines/{shared.Id}/choices/{answer.Id}")).Version });
 
         var repaired = await editor.Get<DialogueValidation>($"{route}/validation");
         Assert.Empty(repaired.Issues);
@@ -108,11 +109,11 @@ public sealed class DialogueStoryStateTests
         var opening = await editor.Get<LineContext>($"{route}/lines/{first.Line.Id}/context");
         var editedChoice = Assert.Single(opening.Outgoing, choice => choice.Id == secret.Id);
         await editor.Expect(NoContent, HttpMethod.Put, $"{route}/lines/{first.Line.Id}/choices/{editedChoice.Id}",
-            new { targetLineId = editedChoice.Line.Id, editedChoice.Text, editedChoice.Position, nextState = "совет" });
+            new { targetLineId = editedChoice.Line.Id, editedChoice.Text, editedChoice.Position, nextState = "совет", version = (await editor.Get<ChoiceSummary>($"{route}/lines/{first.Line.Id}/choices/{editedChoice.Id}")).Version });
         var sharedContext = await editor.Get<LineContext>($"{route}/lines/{shared.Line.Id}/context");
         var removedExit = Assert.Single(sharedContext.Outgoing, choice => choice.RequiredState == "тайна");
         await editor.Expect(NoContent, HttpMethod.Put, $"{route}/lines/{shared.Line.Id}/choices/{removedExit.Id}",
-            new { targetLineId = removedExit.Line.Id, removedExit.Text, removedExit.Position, requiredState = "другое" });
+            new { targetLineId = removedExit.Line.Id, removedExit.Text, removedExit.Position, requiredState = "другое", version = (await editor.Get<ChoiceSummary>($"{route}/lines/{shared.Line.Id}/choices/{removedExit.Id}")).Version });
 
         Assert.Empty((await editor.Get<DialogueValidation>($"{route}/validation")).Issues);
         var blocked = await editor.Read<DialogueValidation>(HttpMethod.Post, advance, UnprocessableEntity,

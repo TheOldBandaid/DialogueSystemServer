@@ -36,7 +36,8 @@ public sealed class CharacterCatalogTests
         await guest.Expect(Unauthorized, HttpMethod.Get, martaRoute + "/usage");
         await guest.Expect(Unauthorized, HttpMethod.Delete, martaRoute);
         await editor.Expect(BadRequest, HttpMethod.Delete, martaRoute, includeToken: false);
-        await editor.Expect(Conflict, HttpMethod.Delete, martaRoute);
+        await editor.Expect(Conflict, HttpMethod.Delete, martaRoute,
+            ifMatch: (await editor.Get<CharacterSummary>(martaRoute)).Version);
 
         var usage = await editor.Get<CharacterUsage>(martaRoute + "/usage");
         Assert.Equal(6, usage.LineCount);
@@ -47,7 +48,8 @@ public sealed class CharacterCatalogTests
         Assert.Equal(new CharacterDialogueUsage(draft.Id, draft.Title, line.Id, 1),
             Assert.Single(usage.Dialogues, item => item.DialogueId == draft.Id));
 
-        await editor.Expect(NoContent, HttpMethod.Put, martaRoute, new { name = " Марта Соколова " });
+        await editor.Expect(NoContent, HttpMethod.Put, martaRoute,
+            new { name = " Марта Соколова ", version = (await editor.Get<CharacterSummary>(martaRoute)).Version });
         var context = await editor.Get<LineContext>($"{draftRoute}/lines/{line.Id}/context");
         Assert.Equal(marta.Id, context.Line.SpeakerId);
         Assert.Equal("Марта Соколова", context.Line.Speaker);
@@ -57,16 +59,21 @@ public sealed class CharacterCatalogTests
             HttpMethod.Post, characters, Created, new { name = "Дежурный" });
         var temporaryRoute = $"{characters}/{temporary.Id}";
         var lineRoute = $"{draftRoute}/lines/{line.Id}";
-        await editor.Expect(NoContent, HttpMethod.Put, lineRoute, new { speakerId = temporary.Id, text = line.Text });
+        await editor.Expect(NoContent, HttpMethod.Put, lineRoute,
+            new { speakerId = temporary.Id, text = line.Text, version = (await editor.Get<LineSummary>(lineRoute)).Version });
         Assert.Equal(1, (await editor.Get<CharacterUsage>(temporaryRoute + "/usage")).LineCount);
-        await editor.Expect(Conflict, HttpMethod.Delete, temporaryRoute);
+        await editor.Expect(Conflict, HttpMethod.Delete, temporaryRoute,
+            ifMatch: (await editor.Get<CharacterSummary>(temporaryRoute)).Version);
 
-        await editor.Expect(NoContent, HttpMethod.Put, lineRoute, new { speakerId = terra.Id, text = line.Text });
+        await editor.Expect(NoContent, HttpMethod.Put, lineRoute,
+            new { speakerId = terra.Id, text = line.Text, version = (await editor.Get<LineSummary>(lineRoute)).Version });
         var unused = await editor.Get<CharacterUsage>(temporaryRoute + "/usage");
         Assert.Equal(0, unused.LineCount);
         Assert.Empty(unused.Dialogues);
-        await editor.Expect(NoContent, HttpMethod.Delete, temporaryRoute);
-        await editor.Expect(NotFound, HttpMethod.Delete, temporaryRoute);
+        await editor.Expect(NoContent, HttpMethod.Delete, temporaryRoute,
+            ifMatch: (await editor.Get<CharacterSummary>(temporaryRoute)).Version);
+        await editor.Expect(NotFound, HttpMethod.Delete, temporaryRoute,
+            ifMatch: new string('0', 64));
         await editor.Expect(NotFound, HttpMethod.Get, temporaryRoute + "/usage");
         Assert.Equal(terra.Id, (await editor.Get<LineContext>(lineRoute + "/context")).Line.SpeakerId);
     }
@@ -101,11 +108,13 @@ public sealed class CharacterCatalogTests
             Created, new { speakerId = marta.Id, text = "Я всё ещё здесь." });
         var secondContext = $"{dialogues}/{second.Id}/lines/{line.Id}/context";
         var route = $"{characters}/{marta.Id}/reassign";
-        var input = new { targetCharacterId = terra.Id, dialogueId = archive.Id };
+        var input = new { targetCharacterId = terra.Id, dialogueId = archive.Id,
+            version = (await editor.Get<CharacterSummary>($"{characters}/{marta.Id}")).Version,
+            targetVersion = (await editor.Get<CharacterSummary>($"{characters}/{terra.Id}")).Version };
 
         await guest.Expect(Unauthorized, HttpMethod.Post, route, input);
         await editor.Expect(BadRequest, HttpMethod.Post, route, input, includeToken: false);
-        await editor.Expect(BadRequest, HttpMethod.Post, route, input with { targetCharacterId = marta.Id });
+        await editor.Expect(BadRequest, HttpMethod.Post, route, input with { targetCharacterId = marta.Id, targetVersion = input.version });
         await editor.Expect(NotFound, HttpMethod.Post, route, input with { targetCharacterId = int.MaxValue });
         await editor.Expect(NotFound, HttpMethod.Post, route, input with { dialogueId = int.MaxValue });
         await editor.Expect(NotFound, HttpMethod.Post, $"{characters}/{int.MaxValue}/reassign", input);
@@ -118,18 +127,24 @@ public sealed class CharacterCatalogTests
         Assert.Equal(original.Lines.Select(item => item with { Speaker = terra.Name, SpeakerKey = terra.Key }), edited.Lines);
         Assert.Equal(original.Choices.ToArray(), edited.Choices.ToArray());
         Assert.Equal(marta.Id, (await editor.Get<LineContext>(secondContext)).Line.SpeakerId);
-        Assert.Equal(0, (await editor.Read<ReassignedLines>(HttpMethod.Post, route, payload: input)).UpdatedLineCount);
-        await editor.Expect(Conflict, HttpMethod.Delete, $"{characters}/{marta.Id}");
+        Assert.Equal(0, (await editor.Read<ReassignedLines>(HttpMethod.Post, route, payload: input with {
+            version = (await editor.Get<CharacterSummary>($"{characters}/{marta.Id}")).Version,
+            targetVersion = (await editor.Get<CharacterSummary>($"{characters}/{terra.Id}")).Version })).UpdatedLineCount);
+        await editor.Expect(Conflict, HttpMethod.Delete, $"{characters}/{marta.Id}",
+            ifMatch: (await editor.Get<CharacterSummary>($"{characters}/{marta.Id}")).Version);
 
         var previous = await editor.Get<DialogueDocument>($"{archiveRoute}/revisions/{revision.Id}/export");
         Assert.Equal(original.Lines.ToArray(), previous.Lines.ToArray());
         var history = await editor.Get<PreviewHistory>(historyRoute);
         Assert.Equal(marta.Name, Assert.Single(history.Steps).Speaker);
 
-        var remaining = await editor.Read<ReassignedLines>(HttpMethod.Post, route, payload: new { targetCharacterId = terra.Id });
+        var remaining = await editor.Read<ReassignedLines>(HttpMethod.Post, route, payload: new { targetCharacterId = terra.Id,
+            version = (await editor.Get<CharacterSummary>($"{characters}/{marta.Id}")).Version,
+            targetVersion = (await editor.Get<CharacterSummary>($"{characters}/{terra.Id}")).Version });
         Assert.Equal(1, remaining.UpdatedLineCount);
         Assert.Equal(terra.Id, (await editor.Get<LineContext>(secondContext)).Line.SpeakerId);
-        await editor.Expect(NoContent, HttpMethod.Delete, $"{characters}/{marta.Id}");
+        await editor.Expect(NoContent, HttpMethod.Delete, $"{characters}/{marta.Id}",
+            ifMatch: (await editor.Get<CharacterSummary>($"{characters}/{marta.Id}")).Version);
         Assert.Equal(marta.Name, Assert.Single((await editor.Get<PreviewHistory>(historyRoute)).Steps).Speaker);
     }
 }

@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DialogueSystem.Infrastructure.Data;
 
-internal sealed class SqliteCleanup(DialogueDbContext db, DatabaseBackups backups) : IDialogueCleanupStore
+internal sealed class SqliteCleanup(DialogueDbContext db, DatabaseBackups backups, TimeProvider clock) : IDialogueCleanup
 {
     private const int BatchSize = 100;
     private sealed record PreviewCandidate(Guid Id, int Step, long HistoryCount);
@@ -13,7 +13,8 @@ internal sealed class SqliteCleanup(DialogueDbContext db, DatabaseBackups backup
     private sealed record Selection(CleanupOutcome Outcome, IReadOnlyList<PreviewCandidate> Previews, IReadOnlyList<RevisionCandidate> Revisions);
 
     public Task<CleanupOutcome> PlanAsync(int dialogueId, int userId, CleanupCriteria criteria, CancellationToken ct) =>
-        SqliteReadSnapshot.ReadAsync(db, async () => (await SelectAsync(dialogueId, userId, criteria, ct)).Outcome, ct);
+        Validate(criteria) is { } invalid ? Task.FromResult(invalid) :
+            SqliteReadSnapshot.ReadAsync(db, async () => (await SelectAsync(dialogueId, userId, criteria, ct)).Outcome, ct);
 
     public async Task<CleanupOutcome> ApplyAsync(int dialogueId, int userId, CleanupCriteria criteria, string confirmationToken, CancellationToken ct)
     {
@@ -83,5 +84,15 @@ internal sealed class SqliteCleanup(DialogueDbContext db, DatabaseBackups backup
             { dialogueId, userId, criteria, activityRevision, previews, revisions })));
         var plan = new CleanupPlan(previews.Count, revisions.Count, previews.Sum(preview => preview.HistoryCount), hasMore, token);
         return new(new(CleanupStatus.Ready, Plan: plan), previews, revisions);
+    }
+    private CleanupOutcome? Validate(CleanupCriteria criteria)
+    {
+        if (criteria.BeforeUnixMilliseconds < 0 || criteria.BeforeUnixMilliseconds > clock.GetUtcNow().ToUnixTimeMilliseconds())
+            return new(CleanupStatus.Invalid, Detail: "Укажите прошедшую дату очистки.");
+        if (criteria.KeepLatest is < 1 or > 1000 || !criteria.Previews && !criteria.Revisions)
+            return new(CleanupStatus.Invalid, Detail: "Выберите данные для очистки и сохраните от 1 до 1000 последних записей.");
+        if (criteria.IncludeInterruptedPreviews && !criteria.Previews)
+            return new(CleanupStatus.Invalid, Detail: "Для очистки прерванных прохождений включите категорию прохождений.");
+        return null;
     }
 }

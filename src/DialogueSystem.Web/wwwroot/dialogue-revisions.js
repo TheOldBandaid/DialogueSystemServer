@@ -1,4 +1,5 @@
-import { api, byId, dialogueUrl, downloadJson, run } from "./workspace.js";
+import { api } from "./http-client.js";
+import { byId, dialogueUrl, downloadJson, run } from "./ui.js";
 
 export function initializeRevisions(path, beforeCopy = () => true, copied = () => {}) {
   const panel = byId("revision-panel");

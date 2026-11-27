@@ -44,7 +44,8 @@ public sealed class DialogueApiTests
         var advance = $"{path}/previews/{current.PreviewId}/choices";
         var selection = new SelectChoice(current.Choices[firstChoice].Id, current.Step);
         await admin.Expect(NotFound, HttpMethod.Post, advance, selection);
-        await editor.Expect(BadRequest, HttpMethod.Post, advance, new SelectChoice(context.Outgoing[0].Id, current.Step));
+        await editor.Expect(BadRequest, HttpMethod.Post, advance,
+            new SelectChoice(context.Outgoing[0].Id, current.Step));
 
         var replies = await Task.WhenAll(
             editor.Send(HttpMethod.Post, advance, selection),
@@ -93,8 +94,10 @@ public sealed class DialogueApiTests
         var ending = await AddLine(draft, "Конец", isEnding: true);
         var foreign = await AddLine(other, "Чужая реплика", isEnding: true);
 
-        await editor.Expect(BadRequest, HttpMethod.Put, $"{draft}", new { startLineId = foreign });
-        await editor.Expect(NoContent, HttpMethod.Put, $"{draft}", new { startLineId = start });
+        await editor.Expect(BadRequest, HttpMethod.Put, $"{draft}",
+            DialogueSettings.From(await editor.Get<DialogueSummary>($"{draft}")) with { StartLineId = foreign });
+        await editor.Expect(NoContent, HttpMethod.Put, $"{draft}",
+            DialogueSettings.From(await editor.Get<DialogueSummary>($"{draft}")) with { StartLineId = start });
         var first = await AddChoice(start, ending, 1);
         await AddChoice(start, loop, 2);
         await AddChoice(loop, loop, 1);
@@ -104,7 +107,8 @@ public sealed class DialogueApiTests
         await editor.Expect(BadRequest, HttpMethod.Post, choices, Choice(int.MaxValue, 3));
         await editor.Expect(Conflict, HttpMethod.Post, choices, Choice(loop, 2));
         await editor.Expect(Conflict, HttpMethod.Post, $"{draft}/lines/{ending}/choices", Choice(loop, 1));
-        await editor.Expect(BadRequest, HttpMethod.Put, $"{choices}/{first.Id}", Choice(foreign, 1));
+        await editor.Expect(BadRequest, HttpMethod.Put, $"{choices}/{first.Id}",
+            new { text = "Продолжить", targetLineId = foreign, position = 1, version = (await editor.Get<ChoiceSummary>($"{choices}/{first.Id}")).Version });
         var unchanged = await editor.Get<LineContext>($"{draft}/lines/{start}/context");
         Assert.Equal(ending, unchanged.Outgoing[0].Line.Id);
 
@@ -118,14 +122,17 @@ public sealed class DialogueApiTests
         await AddChoice(loop, ending, 2);
         await editor.Expect(OK, HttpMethod.Post, $"{draft}/previews");
 
-        await editor.Expect(Conflict, HttpMethod.Delete, $"{draft}/lines/{ending}");
-        await editor.Expect(Conflict, HttpMethod.Delete, $"{draft}/lines/{start}");
+        await editor.Expect(Conflict, HttpMethod.Delete, $"{draft}/lines/{ending}",
+            ifMatch: (await editor.Get<LineContext>($"{draft}/lines/{ending}" + "/context")).DeleteVersion);
+        await editor.Expect(Conflict, HttpMethod.Delete, $"{draft}/lines/{start}",
+            ifMatch: (await editor.Get<LineContext>($"{draft}/lines/{start}" + "/context")).DeleteVersion);
         var orphan = await AddLine(draft, "Неиспользуемая реплика");
         await AddChoice(orphan, orphan, 1);
         var validation = await editor.Get<DialogueValidation>($"{draft}/validation");
         Assert.Empty(validation.Issues);
         Assert.Contains(orphan, validation.UnreachableLineIds);
-        await editor.Expect(NoContent, HttpMethod.Delete, $"{draft}/lines/{orphan}");
+        await editor.Expect(NoContent, HttpMethod.Delete, $"{draft}/lines/{orphan}",
+            ifMatch: (await editor.Get<LineContext>($"{draft}/lines/{orphan}" + "/context")).DeleteVersion);
         await editor.Expect(NotFound, HttpMethod.Get, $"{draft}/lines/{orphan}/context");
 
         async Task<string> CreateDialogue(string title)
@@ -169,8 +176,9 @@ public sealed class DialogueApiTests
             .OrderBy(choice => choice.Id).ThenBy(choice => choice.Position);
         Assert.Equal(expectedIncoming, context.Incoming.Select(choice => (choice.Line.Id, choice.Position)));
         Assert.Equal(new[] { 1, 2, 3 }, context.Outgoing.Select(choice => choice.Position));
-        Assert.Equal(branch, Assert.Single(context.Incoming, choice => choice.Id == loop.Id).Line);
-        Assert.Equal(branch, Assert.Single(context.Outgoing, choice => choice.Id == loop.Id).Line);
+        var reference = new LineReference(branch.Id, branch.Speaker, branch.Text, branch.IsEnding, branch.IsStoryBranch, branch.SpeakerId);
+        Assert.Equal(reference, Assert.Single(context.Incoming, choice => choice.Id == loop.Id).Line);
+        Assert.Equal(reference, Assert.Single(context.Outgoing, choice => choice.Id == loop.Id).Line);
         await editor.Expect(NotFound, HttpMethod.Get, $"/api/dialogues/0/lines/{branch.Id}/context");
     }
 
@@ -199,18 +207,22 @@ public sealed class DialogueApiTests
 
         await guest.Expect(Unauthorized, HttpMethod.Delete, route);
         await editor.Expect(BadRequest, HttpMethod.Delete, route, includeToken: false);
-        await editor.Expect(NoContent, HttpMethod.Put, route, new { title = " Архивная экспедиция " });
+        await editor.Expect(NoContent, HttpMethod.Put, route,
+            DialogueSettings.From(await editor.Get<DialogueSummary>(route)) with { Title = " Архивная экспедиция " });
         var renamed = await editor.Get<DialogueSummary>(route);
         Assert.Equal((original.Id, "Архивная экспедиция", original.StartLineId, original.MinimumPlayerLevel),
             (renamed.Id, renamed.Title, renamed.StartLineId, renamed.MinimumPlayerLevel));
         Assert.NotEqual(original.Version, renamed.Version);
         Assert.Equal(history.Steps.ToArray(), (await editor.Get<PreviewHistory>(historyRoute)).Steps.ToArray());
 
-        await editor.Expect(NoContent, HttpMethod.Delete, route);
-        await editor.Expect(NotFound, HttpMethod.Delete, route);
+        await editor.Expect(NoContent, HttpMethod.Delete, route,
+            ifMatch: (await editor.Get<DialogueSummary>(route)).DeleteVersion);
+        await editor.Expect(NotFound, HttpMethod.Delete, route,
+            ifMatch: new string('0', 64));
         await editor.Expect(NotFound, HttpMethod.Get, route);
         await editor.Expect(NotFound, HttpMethod.Get, historyRoute);
-        await editor.Expect(NotFound, HttpMethod.Put, route, new { title = "Архив" });
+        await editor.Expect(NotFound, HttpMethod.Put, route,
+            DialogueSettings.From(renamed) with { Title = "Архив" });
         Assert.Equal(other, Assert.Single(await editor.GetDialogues(dialoguesPath)));
         Assert.Equal(otherHistory.Steps.ToArray(), (await editor.Get<PreviewHistory>(otherHistoryRoute)).Steps.ToArray());
 

@@ -36,8 +36,8 @@ public sealed class AccountsApiTests
         var editorId = Assert.Single(users, user => user.Login == "editor").Id;
         var adminId = Assert.Single(users, user => user.Login == "admin").Id;
         var editorRole = $"{accounts}/{editorId}/role";
-        var makeAdmin = new { role = "Administrator" };
-        var makeEditor = new { role = "Editor" };
+        var makeAdmin = new { role = "Administrator", version = (await admin.Get<AccountSummary>($"{accounts}/{editorId}")).Version };
+        var makeEditor = new { role = "Editor", version = (await admin.Get<AccountSummary>($"{accounts}/{adminId}")).Version };
 
         await editor.Expect(Forbidden, HttpMethod.Get, accounts);
         await editor.Expect(Forbidden, HttpMethod.Put, editorRole, makeAdmin);
@@ -46,7 +46,7 @@ public sealed class AccountsApiTests
         await admin.Expect(NoContent, HttpMethod.Put, editorRole, makeAdmin);
         Assert.Equal("Administrator", (await editor.Get<AccountSummary>(profile)).Role);
 
-        await admin.Expect(NoContent, HttpMethod.Put, editorRole, makeEditor);
+        await admin.Expect(NoContent, HttpMethod.Put, editorRole, makeEditor with { version = (await admin.Get<AccountSummary>($"{accounts}/{editorId}")).Version });
         Assert.Equal("Editor", (await editor.Get<AccountSummary>(profile)).Role);
         await editor.Expect(NoContent, HttpMethod.Post, $"{accounts}/logout");
         await editor.Expect(Unauthorized, HttpMethod.Get, profile);

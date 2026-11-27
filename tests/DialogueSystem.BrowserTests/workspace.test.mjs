@@ -9,7 +9,7 @@ test("keeps the workspace locked until all pending operations finish", async () 
     <ul id="accounts-list"></ul><button id="refresh-accounts"></button>
     <p id="status"></p><button id="logout"></button>`);
   globalThis.document = dom.window.document;
-  const { run } = await import("../../src/DialogueSystem.Web/wwwroot/workspace.js");
+  const { run } = await import("../../src/DialogueSystem.Web/wwwroot/ui.js");
   const first = Promise.withResolvers();
   const second = Promise.withResolvers();
   const a = run(() => first.promise)();

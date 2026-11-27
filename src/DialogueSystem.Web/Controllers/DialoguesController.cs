@@ -19,6 +19,7 @@ public sealed class DialoguesController(IDialogueCatalog catalog) : ControllerBa
         catalog.PageAsync(q, hasStart, before, ct);
 
     [HttpGet("{id:int}")]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<DialogueSummary>> Get(int id, CancellationToken cancellationToken)
     {
         var dialogue = await catalog.FindAsync(id, cancellationToken);
@@ -37,6 +38,9 @@ public sealed class DialoguesController(IDialogueCatalog catalog) : ControllerBa
 
     [HttpPut("{id:int}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status428PreconditionRequired)]
     public async Task<IActionResult> Update(int id, DialogueSettingsInput input, CancellationToken cancellationToken) =>
         input.Version is null ? VersionPreconditions.Missing() :
             VersionPreconditions.Result(await catalog.UpdateAsync(id,
@@ -44,6 +48,9 @@ public sealed class DialoguesController(IDialogueCatalog catalog) : ControllerBa
 
     [HttpDelete("{id:int}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status412PreconditionFailed)]
+    [ProducesResponseType(StatusCodes.Status428PreconditionRequired)]
     public async Task<IActionResult> Delete(int id, [FromHeader(Name = "If-Match")] string? version, CancellationToken cancellationToken)
     {
         var error = VersionPreconditions.Header(version, out var expected);
@@ -51,6 +58,7 @@ public sealed class DialoguesController(IDialogueCatalog catalog) : ControllerBa
     }
 
     [HttpGet("{id:int}/export")]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<DialogueDocument>> Export(int id, CancellationToken cancellationToken)
     {
         var document = await catalog.ExportAsync(id, cancellationToken);
@@ -58,6 +66,8 @@ public sealed class DialoguesController(IDialogueCatalog catalog) : ControllerBa
     }
 
     [HttpGet("{id:int}/map")]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
     public async Task<ActionResult<DialogueMapSnapshot>> Map(int id, CancellationToken ct)
     {
         var map = await catalog.MapAsync(id, ct);
@@ -77,6 +87,7 @@ public sealed class DialoguesController(IDialogueCatalog catalog) : ControllerBa
 
     [HttpPost("{id:int}/copy")]
     [ProducesResponseType(StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<DialogueSummary>> Copy(int id,
         [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] DialogueCopyInput? input, CancellationToken ct)
     {
@@ -85,6 +96,7 @@ public sealed class DialoguesController(IDialogueCatalog catalog) : ControllerBa
     }
 
     [HttpGet("{id:int}/validation")]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<DialogueValidation>> Validation(int id, CancellationToken cancellationToken)
     {
         var validation = await catalog.ValidateAsync(id, cancellationToken);

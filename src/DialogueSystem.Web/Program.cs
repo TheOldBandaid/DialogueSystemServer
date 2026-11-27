@@ -12,11 +12,7 @@ var dataDirectory = Directory.CreateDirectory(
 
 builder.Services.AddDialogueStorage(dataDirectory.FullName);
 builder.Services.AddSingleton(_ => new DataDirectoryLease(dataDirectory.FullName));
-builder.Services.AddScoped<AccountService>();
-builder.Services.AddScoped<LineEditor>();
-builder.Services.AddScoped<PreviewService>();
 builder.Services.AddSingleton(TimeProvider.System);
-builder.Services.AddScoped<DialogueCleanupService>();
 builder.Services.AddDataProtection().PersistKeysToFileSystem(dataDirectory.CreateSubdirectory("keys"));
 builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme).AddCookie(options =>
 {
@@ -71,7 +67,7 @@ await using (var scope = app.Services.CreateAsyncScope())
         return;
     }
 
-    var accounts = scope.ServiceProvider.GetRequiredService<AccountService>();
+    var accounts = scope.ServiceProvider.GetRequiredService<IAccountService>();
     if (app.Configuration["DialogueSystem:AdminPassword"] is { Length: > 0 } adminPassword)
         await accounts.EnsureAsync("admin", adminPassword, AccountRoles.Administrator, CancellationToken.None);
     if (app.Configuration["DialogueSystem:EditorPassword"] is { Length: > 0 } editorPassword)

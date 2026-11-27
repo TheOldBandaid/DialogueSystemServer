@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DialogueSystem.Infrastructure.Data;
 
-internal sealed class SqlitePreviews(DialogueDbContext db, GraphSnapshots cache) : IPreviewStore
+internal sealed class SqlitePreviews(DialogueDbContext db, GraphSnapshots cache) : IPreviewService
 {
     public async Task<PreviewSessionPage?> ListPageAsync(int dialogueId, int userId, Guid? before, CancellationToken ct)
     {
@@ -46,26 +46,104 @@ internal sealed class SqlitePreviews(DialogueDbContext db, GraphSnapshots cache)
             result with { Steps = result.Steps.Take(pageSize).ToArray(), NextAfterStep = result.Steps[pageSize - 1].Step };
     }
 
-    public Task<DialoguePreview?> FindAsync(int dialogueId, int userId, Guid previewId, CancellationToken ct) =>
+    private Task<DialoguePreview?> FindAsync(int dialogueId, int userId, Guid previewId, CancellationToken ct) =>
         Owned(dialogueId, userId).SingleOrDefaultAsync(preview => preview.Id == previewId, ct);
 
-    public Task<DialogueGraph?> LoadGraphAsync(int dialogueId, CancellationToken ct) =>
+    private Task<DialogueGraph?> LoadGraphAsync(int dialogueId, CancellationToken ct) =>
         DialogueGraphLoader.LoadAsync(db, cache, dialogueId, ct);
 
-    public Task<bool> GraphIsCurrentAsync(int dialogueId, long revision, CancellationToken ct) =>
+    private Task<bool> GraphIsCurrentAsync(int dialogueId, long revision, CancellationToken ct) =>
         db.Dialogues.AnyAsync(dialogue => dialogue.Id == dialogueId && dialogue.Revision == revision, ct);
 
-    public Task<int?> CurrentStepAsync(int dialogueId, int userId, Guid previewId, CancellationToken ct) =>
+    private Task<int?> CurrentStepAsync(int dialogueId, int userId, Guid previewId, CancellationToken ct) =>
         Owned(dialogueId, userId).Where(preview => preview.Id == previewId)
             .Select(preview => (int?)preview.Step).SingleOrDefaultAsync(ct);
 
-    public async Task<IStorageTransaction> BeginAsync(CancellationToken ct) =>
-        new SqliteTransaction(await db.Database.BeginTransactionAsync(ct));
-
-    public void Add(DialoguePreview preview) => db.Previews.Add(preview);
-
-    public Task SaveAsync(CancellationToken ct) => db.SaveChangesAsync(ct);
-
     private IQueryable<DialoguePreview> Owned(int dialogueId, int userId) =>
         db.Previews.Where(preview => preview.DialogueId == dialogueId && preview.UserId == userId);
+    public async Task<PreviewResult> StartAsync(int dialogueId, int userId, int? playerLevel, CancellationToken ct)
+    {
+        var graph = await LoadGraphAsync(dialogueId, ct);
+        if (graph is null)
+            return new(PreviewStatus.NotFound);
+
+        var validation = graph.Validate(ct: ct);
+        if (validation.Errors.Count != 0)
+            return new(PreviewStatus.InvalidGraph, Validation: validation);
+
+        if (graph.MinimumPlayerLevel is int minimum && (playerLevel is null || playerLevel < minimum))
+            return new(PreviewStatus.LevelTooLow, MinimumLevel: minimum);
+
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        if (!await GraphIsCurrentAsync(dialogueId, graph.Revision, ct))
+            return new(PreviewStatus.StaleGraph);
+
+        var preview = new DialoguePreview
+        {
+            Id = Guid.NewGuid(),
+            DialogueId = dialogueId,
+            CurrentLineId = graph.StartLineId!.Value,
+            UserId = userId,
+            StartedAtUnixMilliseconds = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
+        };
+        db.Previews.Add(preview);
+        var step = RecordStep(graph, preview, validation.UnreachableLineIds, choiceText: null);
+        await db.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
+        return new(PreviewStatus.Ready, Step: step);
+    }
+
+    public async Task<PreviewResult> AdvanceAsync(
+        int dialogueId, int userId, Guid previewId, SelectChoice request, CancellationToken ct)
+    {
+        var preview = await FindAsync(dialogueId, userId, previewId, ct);
+        if (preview is null)
+            return new(PreviewStatus.NotFound);
+
+        if (request.Step != preview.Step)
+            return new(PreviewStatus.StaleStep);
+
+        var graph = await LoadGraphAsync(dialogueId, ct);
+        if (graph is null) return new(PreviewStatus.NotFound);
+        if (!graph.ContainsLine(preview.CurrentLineId)) return new(PreviewStatus.RemovedLine);
+        var validation = graph.Validate(preview, ct);
+        if (validation.Errors.Count != 0)
+            return new(PreviewStatus.InvalidGraph, Validation: validation);
+
+        var choice = graph.FindChoice(preview, request.ChoiceId);
+        if (choice is null)
+            return new(PreviewStatus.UnavailableChoice);
+
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        var currentStep = await CurrentStepAsync(dialogueId, userId, previewId, ct);
+        if (currentStep is null) return new(PreviewStatus.NotFound);
+        if (currentStep != request.Step) return new(PreviewStatus.StaleStep);
+        if (!await GraphIsCurrentAsync(dialogueId, graph.Revision, ct))
+            return new(PreviewStatus.StaleGraph);
+
+        preview.CurrentLineId = choice.TargetLineId;
+        preview.StoryState = DialogueStoryRules.Advance(choice.NextState, preview.StoryState);
+        preview.Step++;
+        var step = RecordStep(graph, preview, validation.UnreachableLineIds, choice.Text);
+        await db.SaveChangesAsync(ct);
+        await transaction.CommitAsync(ct);
+        return new(PreviewStatus.Ready, Step: step);
+    }
+
+    private static PreviewStep RecordStep(
+        DialogueGraph graph, DialoguePreview preview, IReadOnlyList<int> unreachable, string? choiceText)
+    {
+        var step = graph.GetPreviewStep(preview, unreachable);
+        preview.History.Add(new PreviewHistoryEntry
+        {
+            Step = step.Step,
+            LineId = step.Line.Id,
+            Speaker = step.Line.Speaker,
+            Text = step.Line.Text,
+            IsEnding = step.Line.IsEnding,
+            ChoiceText = choiceText,
+            StoryState = step.StoryState
+        });
+        return step;
+    }
 }

@@ -10,9 +10,10 @@ namespace DialogueSystem.Web.Controllers;
 [Authorize]
 [AutoValidateAntiforgeryToken]
 [Route("api/dialogues/{id:int}/previews")]
-public sealed class DialoguePreviewsController(PreviewService previews) : ControllerBase
+public sealed class DialoguePreviewsController(IPreviewService previews) : ControllerBase
 {
     [HttpGet]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<PreviewSessionPage>> Page(int id, Guid? before, CancellationToken cancellationToken)
     {
         var page = await previews.ListPageAsync(id, SessionPrincipal.UserId(User), before, cancellationToken);
@@ -20,6 +21,7 @@ public sealed class DialoguePreviewsController(PreviewService previews) : Contro
     }
 
     [HttpGet("{previewId:guid}/history")]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<PreviewHistory>> History(int id, Guid previewId, CancellationToken cancellationToken,
         [FromQuery, Range(-1, int.MaxValue)] int after = -1)
     {
@@ -29,6 +31,9 @@ public sealed class DialoguePreviewsController(PreviewService previews) : Contro
 
     [HttpPost]
     [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
     public async Task<ActionResult<PreviewStep>> StartPreview(
         int id, [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] PreviewInput? input,
         CancellationToken cancellationToken) =>
@@ -36,6 +41,9 @@ public sealed class DialoguePreviewsController(PreviewService previews) : Contro
 
     [HttpPost("{previewId:guid}/choices")]
     [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ProducesResponseType(StatusCodes.Status409Conflict)]
+    [ProducesResponseType(StatusCodes.Status422UnprocessableEntity)]
     public async Task<ActionResult<PreviewStep>> AdvancePreview(
         int id, Guid previewId, SelectChoice request, CancellationToken cancellationToken) =>
         PreviewResponse(await previews.AdvanceAsync(id, SessionPrincipal.UserId(User), previewId, request, cancellationToken));

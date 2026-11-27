@@ -19,10 +19,10 @@ public sealed class MetadataConcurrencyTests
         var after = await client.Get<DialogueSummary>(path);
         Assert.Equal(before.Version, after.Version);
         Assert.NotEqual(before.DeleteVersion, after.DeleteVersion);
-        using var stale = await client.Send(HttpMethod.Delete, path, includeVersion: false, ifMatch: before.DeleteVersion);
+        using var stale = await client.Send(HttpMethod.Delete, path, ifMatch: before.DeleteVersion);
         Assert.Equal(PreconditionFailed, stale.StatusCode);
         await client.Read<DialogueRevisionSummary>(HttpMethod.Post, path + "/revisions", Created, new { label = "Новая версия" });
-        using var staleRevision = await client.Send(HttpMethod.Delete, path, includeVersion: false, ifMatch: after.DeleteVersion);
+        using var staleRevision = await client.Send(HttpMethod.Delete, path, ifMatch: after.DeleteVersion);
         Assert.Equal(PreconditionFailed, staleRevision.StatusCode);
     }
 
@@ -38,21 +38,24 @@ public sealed class MetadataConcurrencyTests
         await b.Login("editor", password);
         var original = (await a.GetDialogues("/api/dialogues"))[0];
         var path = $"/api/dialogues/{original.Id}";
-        await a.Expect(NoContent, HttpMethod.Put, path, new { title = "Свежие данные", original.Version });
-        await b.Expect(Conflict, HttpMethod.Put, path + "", new { minimumPlayerLevel = 9, original.Version });
-        await b.Expect(Conflict, HttpMethod.Put, path + "", new { startLineId = (int?)null, original.Version });
-        using var staleDelete = await b.Send(HttpMethod.Delete, path, includeVersion: false, ifMatch: original.DeleteVersion);
+        await a.Expect(NoContent, HttpMethod.Put, path,
+            DialogueSettings.From(original) with { Title = "Свежие данные", Version = original.Version });
+        await b.Expect(Conflict, HttpMethod.Put, path + "",
+            DialogueSettings.From(original) with { MinimumPlayerLevel = 9, Version = original.Version });
+        await b.Expect(Conflict, HttpMethod.Put, path + "",
+            DialogueSettings.From(original) with { StartLineId = (int?)null, Version = original.Version });
+        using var staleDelete = await b.Send(HttpMethod.Delete, path, ifMatch: original.DeleteVersion);
         Assert.Equal(PreconditionFailed, staleDelete.StatusCode);
         var fresh = await b.Get<DialogueSummary>(path);
         Assert.Equal("Свежие данные", fresh.Title);
         Assert.Equal(original.MinimumPlayerLevel, fresh.MinimumPlayerLevel);
         Assert.Equal(original.StartLineId, fresh.StartLineId);
-        using var noVersion = await b.Send(HttpMethod.Delete, path, includeVersion: false);
+        using var noVersion = await b.Send(HttpMethod.Delete, path);
         Assert.Equal(428, (int)noVersion.StatusCode);
         using var missing = await b.Send(HttpMethod.Put, path,
-            new { title = "Без версии", fresh.StartLineId, fresh.MinimumPlayerLevel }, includeVersion: false);
+            new { title = "Без версии", fresh.StartLineId, fresh.MinimumPlayerLevel });
         Assert.Equal(428, (int)missing.StatusCode);
-        using var wildcard = await b.Send(HttpMethod.Delete, path, includeVersion: false, ifMatch: "*");
+        using var wildcard = await b.Send(HttpMethod.Delete, path, ifMatch: "*");
         Assert.Equal(BadRequest, wildcard.StatusCode);
     }
 
@@ -73,17 +76,18 @@ public sealed class MetadataConcurrencyTests
         var original = await client.Get<LineContext>(path + "/context");
         var choice = await client.Read<System.Text.Json.Nodes.JsonObject>(HttpMethod.Post, path + "/choices", Created,
             new { targetLineId = dialogue.StartLineId, text = "Новая связь", position = 1 });
-        using var stale = await client.Send(HttpMethod.Delete, path, includeVersion: false, ifMatch: original.DeleteVersion);
+        using var stale = await client.Send(HttpMethod.Delete, path, ifMatch: original.DeleteVersion);
         Assert.Equal(PreconditionFailed, stale.StatusCode);
         var context = await client.Get<LineContext>(path + "/context");
         var answer = Assert.Single(context.Outgoing);
         var choicePath = $"{path}/choices/{answer.Id}";
         await client.Expect(NoContent, HttpMethod.Put, choicePath,
             new { targetLineId = answer.Line.Id, text = "Обновлённый ответ", answer.Position, answer.Version });
-        using var staleChoice = await client.Send(HttpMethod.Delete, choicePath, includeVersion: false, ifMatch: answer.Version);
+        using var staleChoice = await client.Send(HttpMethod.Delete, choicePath, ifMatch: answer.Version);
         Assert.Equal(PreconditionFailed, staleChoice.StatusCode);
         Assert.Equal("Обновлённый ответ", Assert.Single((await client.Get<LineContext>(path + "/context")).Outgoing).Text);
-        await client.Expect(NoContent, HttpMethod.Delete, path);
+        await client.Expect(NoContent, HttpMethod.Delete, path,
+            ifMatch: (await client.Get<LineContext>(path + "/context")).DeleteVersion);
     }
 
     [Fact]
@@ -97,15 +101,16 @@ public sealed class MetadataConcurrencyTests
         var source = await client.Read<CharacterSummary>(HttpMethod.Post, "/api/characters", Created, new { name = "Источник" });
         var target = await client.Read<CharacterSummary>(HttpMethod.Post, "/api/characters", Created, new { name = "Цель" });
         var path = $"/api/characters/{source.Id}";
-        await client.Expect(NoContent, HttpMethod.Put, path, new { name = "Новое имя", source.Version });
-        using var staleDelete = await client.Send(HttpMethod.Delete, path, includeVersion: false, ifMatch: source.Version);
+        await client.Expect(NoContent, HttpMethod.Put, path,
+            new { name = "Новое имя", source.Version });
+        using var staleDelete = await client.Send(HttpMethod.Delete, path, ifMatch: source.Version);
         Assert.Equal(PreconditionFailed, staleDelete.StatusCode);
         var fresh = await client.Get<CharacterSummary>(path);
         var dialogue = (await client.GetDialogues("/api/dialogues"))[0];
         var line = await client.Read<LineSummary>(HttpMethod.Post, $"/api/dialogues/{dialogue.Id}/lines", Created,
             new { speakerId = source.Id, text = "Добавлено другим редактором" });
         using var staleReassign = await client.Send(HttpMethod.Post, path + "/reassign",
-            new { targetCharacterId = target.Id, version = fresh.Version, targetVersion = target.Version }, includeVersion: false);
+            new { targetCharacterId = target.Id, version = fresh.Version, targetVersion = target.Version });
         Assert.Equal(Conflict, staleReassign.StatusCode);
         Assert.Equal(source.Id, (await client.Get<LineContext>($"/api/dialogues/{dialogue.Id}/lines/{line.Id}/context")).Line.SpeakerId);
     }

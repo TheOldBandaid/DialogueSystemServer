@@ -132,9 +132,7 @@ namespace DialogueSystem.Infrastructure.Data.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropForeignKey(
-                name: "FK_Dialogues_Lines_Id_StartLineId",
-                table: "Dialogues");
+            migrationBuilder.Sql("UPDATE Dialogues SET StartLineId = NULL;");
 
             migrationBuilder.DropTable(
                 name: "Choices");

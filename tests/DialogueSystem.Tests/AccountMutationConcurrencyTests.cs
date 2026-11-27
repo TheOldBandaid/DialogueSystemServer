@@ -44,7 +44,8 @@ public sealed class AccountMutationConcurrencyTests
                 await other.Expect(NoContent, HttpMethod.Put, "/api/accounts/me/password",
                     new { currentPassword = password, newPassword = Guid.NewGuid().ToString("N") });
             else
-                await other.Expect(NoContent, HttpMethod.Put, $"/api/accounts/{actorId}/role", new { role = AccountRoles.Editor });
+                await other.Expect(NoContent, HttpMethod.Put, $"/api/accounts/{actorId}/role",
+            new { role = AccountRoles.Editor, version = (await other.Get<AccountSummary>($"/api/accounts/{actorId}")).Version });
         }
         finally { gate.Released.Set(); }
         using var reply = await pending;
@@ -71,8 +72,10 @@ public sealed class AccountMutationConcurrencyTests
             new { login = "target.editor", password, role = AccountRoles.Editor });
         await other.Login("second.admin", password);
         var actorId = (await actor.Get<AccountSummary>("/api/accounts/me")).Id;
-        probe.AfterRead = () => other.Expect(NoContent, HttpMethod.Put, $"/api/accounts/{actorId}/role", new { role = AccountRoles.Editor });
-        await actor.Expect(Forbidden, HttpMethod.Put, $"/api/accounts/{target.Id}/role", new { role = AccountRoles.Administrator, target.Version });
+        var actorVersion = (await other.Get<AccountSummary>($"/api/accounts/{actorId}")).Version;
+        probe.AfterRead = () => other.Expect(NoContent, HttpMethod.Put, $"/api/accounts/{actorId}/role", new { role = AccountRoles.Editor, version = actorVersion });
+        await actor.Expect(Forbidden, HttpMethod.Put, $"/api/accounts/{target.Id}/role",
+            new { role = AccountRoles.Administrator, target.Version });
         Assert.Null(probe.AfterRead);
         Assert.Equal(AccountRoles.Editor, (await other.Get<AccountSummary>($"/api/accounts/{target.Id}")).Role);
     }

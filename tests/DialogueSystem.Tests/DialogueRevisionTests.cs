@@ -35,9 +35,11 @@ public sealed class DialogueRevisionTests
             await guest.Expect(Unauthorized, HttpMethod.Get, revisions);
             await guest.Expect(Unauthorized, HttpMethod.Post, revisions, input);
             await editor.Expect(BadRequest, HttpMethod.Post, revisions, input, includeToken: false);
-            await editor.Expect(BadRequest, HttpMethod.Post, revisions, new { label = " " });
+            await editor.Expect(BadRequest, HttpMethod.Post, revisions,
+            new { label = " " });
             Assert.Empty((await editor.Get<DialogueRevisionPage>(revisions)).Items);
-            await editor.Expect(NoContent, HttpMethod.Put, source + "", new { minimumPlayerLevel = 4 });
+            await editor.Expect(NoContent, HttpMethod.Put, source + "",
+            DialogueSettings.From(await editor.Get<DialogueSummary>(source + "")) with { MinimumPlayerLevel = 4 });
             snapshot = await editor.Get<DialogueDocument>(source + "/export");
             var preview = await editor.Read<PreviewStep>(
                 HttpMethod.Post, source + "/previews", payload: new { playerLevel = 4 });
@@ -53,10 +55,12 @@ public sealed class DialogueRevisionTests
             await editor.Expect(NotFound, HttpMethod.Get, otherRevision + "/export");
             await editor.Expect(NotFound, HttpMethod.Post, otherRevision + "/copy");
 
-            await editor.Expect(NoContent, HttpMethod.Put, source, new { title = "Текущая редакция" });
-            await editor.Expect(NoContent, HttpMethod.Put, source + "", new { minimumPlayerLevel = 2 });
+            await editor.Expect(NoContent, HttpMethod.Put, source,
+            DialogueSettings.From(await editor.Get<DialogueSummary>(source)) with { Title = "Текущая редакция" });
+            await editor.Expect(NoContent, HttpMethod.Put, source + "",
+            DialogueSettings.From(await editor.Get<DialogueSummary>(source + "")) with { MinimumPlayerLevel = 2 });
             await editor.Expect(NoContent, HttpMethod.Put, $"{source}/lines/{preview.Line.Id}",
-                new { speakerId = preview.Line.SpeakerId, text = "Обновлённая стартовая реплика", isStoryBranch = true });
+            new { speakerId = preview.Line.SpeakerId, text = "Обновлённая стартовая реплика", isStoryBranch = true, version = (await editor.Get<LineSummary>($"{source}/lines/{preview.Line.Id}")).Version });
         }
 
         await using (var app = data.Start(settings: [new("DialogueSystem:EditorPassword", password)]))
@@ -94,7 +98,8 @@ public sealed class DialogueRevisionTests
             Assert.Contains(current.Lines, line => line.Text == "Обновлённая стартовая реплика");
             Assert.Equal(oldHistory.Steps.ToArray(), (await editor.Get<PreviewHistory>(historyPath)).Steps.ToArray());
 
-            await editor.Expect(NoContent, HttpMethod.Delete, source);
+            await editor.Expect(NoContent, HttpMethod.Delete, source,
+            ifMatch: (await editor.Get<DialogueSummary>(source)).DeleteVersion);
             await editor.Expect(NotFound, HttpMethod.Get, revisions);
             Assert.Equal(copy, await editor.Get<DialogueSummary>($"{Dialogues}/{copy.Id}"));
             using var scope = app.Services.CreateScope();
