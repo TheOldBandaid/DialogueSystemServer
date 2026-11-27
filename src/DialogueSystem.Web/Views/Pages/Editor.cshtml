@@ -99,14 +99,19 @@
       <aside>
         <h2>Сюжетные развилки</h2>
         <ul id="branches"></ul>
+        <button type="button" id="branches-more" hidden>Показать ещё развилки</button>
         <h2>Реплики</h2>
+        <label>Поиск реплики <input type="search" id="line-search" maxlength="160"></label>
         <ul id="lines"></ul>
+        <button type="button" id="lines-more" hidden>Показать ещё реплики</button>
         <button id="new-line">Добавить реплику</button>
       </aside>
       <div>
         <h2 id="line-heading">Реплика</h2>
         <form id="line-form">
           <label>Говорящий <select name="speakerId" required></select></label>
+          <label>Поиск говорящего <input type="search" id="speaker-search" maxlength="160"></label>
+          <button type="button" id="speakers-more" hidden>Показать ещё говорящих</button>
           <label>Текст <textarea name="text" rows="4" maxlength="4000" required></textarea></label>
           <label class="check"><input name="isEnding" type="checkbox"> Концовка</label>
           <label class="check"><input name="isStoryBranch" type="checkbox"> Сюжетная развилка</label>
@@ -120,8 +125,11 @@
         <div id="context" hidden>
           <h3>Входящие переходы</h3>
           <ul id="incoming"></ul>
+            <button type="button" id="incoming-more" hidden>Показать ещё входящие переходы</button>
           <h3>Варианты ответа</h3>
           <div id="choices"></div>
+            <button type="button" id="choices-first" hidden>Показать первые ответы</button>
+            <button type="button" id="choices-more" hidden>Показать ещё ответы</button>
           <button id="new-choice">Добавить вариант</button>
         </div>
       </div>

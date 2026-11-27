@@ -2,6 +2,7 @@ import { api, byId, dialogueUrl, downloadJson, initializeWorkspace, run } from "
 import { createDialogueMap } from "./dialogue-map.js";
 import { initializeRevisions } from "./dialogue-revisions.js";
 import { createDraftGuard } from "./draft-guard.js";
+import { createPagedSelect } from "./paged-select.js";
 
 const editorContent = byId("editor-content");
 const renameDialogueForm = byId("rename-dialogue");
@@ -11,19 +12,23 @@ const previewForm = byId("preview-form");
 const previewHistory = byId("preview-history");
 const previewSessions = byId("preview-sessions");
 const historyDate = new Intl.DateTimeFormat("ru-RU", { dateStyle: "short", timeStyle: "medium" });
-const state = { dialogue: null, lines: [], characters: [], line: null };
+const state = { dialogue: null, lines: [], branches: [], line: null, deleteVersion: null, targetPage: null };
+let contextPage;
 const drafts = createDraftGuard(editorContent);
 let sessionCursor;
 let historyCursor;
-
-function setOptions(select, records, label, current) {
-  select.replaceChildren(...records.map(item => new Option(label(item), item.id)));
-  if (current != null) select.value = current;
-}
+let linesCursor;
+let branchesCursor;
+let linesGeneration = 0;
+let linesTimer;
 
 const path = () => `/api/dialogues/${state.dialogue.id}`;
 const linePath = () => `${path()}/lines/${state.line.id}`;
 const characterLabel = character => `${character.name} · №${character.id}`;
+const speakerPicker = createPagedSelect({
+  select: lineForm.elements.speakerId, search: byId("speaker-search"), more: byId("speakers-more"),
+  endpoint: () => "/api/characters/page", itemEndpoint: id => `/api/characters/${id}`, label: characterLabel
+});
 const dialogueMap = createDialogueMap(() => api(`${path()}/map`), selectLine);
 const refreshRevisions = initializeRevisions(path, () => drafts.confirmDiscard(), () => drafts.reset());
 const lineLabel = line => `№${line.id} · ${line.text}`;
@@ -56,7 +61,7 @@ async function loadDialogue(id, preferredLineId) {
   hideValidation();
   const route = `/api/dialogues/${id}`;
   const [dialogue, lines, branches] = await Promise.all([
-    api(route), api(`${route}/lines`), api(`${route}/story-branches`)
+    api(route), api(`${route}/lines/page`), api(`${route}/lines/page?branchesOnly=true`)
   ]);
   if (state.dialogue?.id !== dialogue.id) {
     previewForm.reset();
@@ -67,17 +72,42 @@ async function loadDialogue(id, preferredLineId) {
   document.title = `${dialogue.title} — Редактор диалога`;
   renameDialogueForm.elements.title.value = dialogue.title;
   renderLevelSettings();
-  state.lines = lines;
-  listLinks("lines", lines, "Реплик пока нет.");
-  listLinks("branches", branches, "Сюжетные развилки не отмечены.");
-  const preferred = lines.find(line => line.id === preferredLineId);
-  await selectLine(preferred?.id ?? branches[0]?.id ?? dialogue.startLineId ?? lines[0]?.id, true);
+  state.lines = lines.items;
+  state.branches = branches.items;
+  state.targetPage = lines;
+  linesCursor = lines.nextBeforeId;
+  branchesCursor = branches.nextBeforeId;
+  byId("line-search").value = "";
+  linesGeneration++;
+  listLinks("lines", state.lines, "Реплик пока нет.");
+  listLinks("branches", state.branches, "Сюжетные развилки не отмечены.");
+  byId("lines-more").hidden = linesCursor == null;
+  byId("branches-more").hidden = branchesCursor == null;
+  const fallback = state.branches[0]?.id ?? dialogue.startLineId ?? state.lines[0]?.id;
+  try { await selectLine(preferredLineId > 0 ? preferredLineId : fallback, true); }
+  catch (error) {
+    if (error.status !== 404 || !(preferredLineId > 0)) throw error;
+    await selectLine(fallback, true);
+  }
   await dialogueMap.refresh();
 }
 
-async function selectLine(id, discardConfirmed = false) {
+async function selectLine(id, discardConfirmed = false, preferredPosition) {
   if (!discardConfirmed && !drafts.confirmDiscard()) return;
-  const context = id == null ? null : await api(`${path()}/lines/${id}/context`);
+  const after = preferredPosition > 20 ? preferredPosition - 20 : null;
+  let context;
+  if (id != null && after) {
+    const fresh = await api(path());
+    context = await api(`${path()}/lines/${id}/context?outgoingAfter=${after}&version=${fresh.version}`);
+  } else context = id == null ? null : await api(`${path()}/lines/${id}/context`);
+  contextPage = context;
+  if (context?.dialogue) {
+    state.dialogue = context.dialogue;
+    byId("dialogue-title").textContent = state.dialogue.title;
+    renameDialogueForm.elements.title.value = state.dialogue.title;
+    renderLevelSettings();
+  }
+  state.deleteVersion = context?.deleteVersion;
   state.line = context?.line ?? null;
   const line = state.line;
   dialogueMap.select(line?.id);
@@ -87,7 +117,8 @@ async function selectLine(id, discardConfirmed = false) {
   if (url.href !== location.href) history.replaceState(null, "", url);
   const isStart = line != null && line.id === state.dialogue.startLineId;
   byId("line-heading").textContent = line ? `Реплика №${line.id}${isStart ? " · старт" : ""}` : "Новая реплика";
-  setOptions(lineForm.elements.speakerId, state.characters, characterLabel, line?.speakerId);
+  byId("speaker-search").value = "";
+  await speakerPicker.refresh(line?.speakerId);
   lineForm.elements.text.value = line?.text ?? "";
   lineForm.elements.isEnding.checked = line?.isEnding ?? false;
   lineForm.elements.isStoryBranch.checked = line?.isStoryBranch ?? false;
@@ -97,25 +128,30 @@ async function selectLine(id, discardConfirmed = false) {
   byId("context").hidden = !context;
   if (!context) {
     byId("choices").replaceChildren();
-    drafts.reset(lineForm);
+    byId("choices-first").hidden = true;
+    byId("choices-more").hidden = true;
+    byId("incoming-more").hidden = true;
+    drafts.reset(lineForm, renameDialogueForm, minimumLevelForm);
     return;
   }
 
   byId("incoming").replaceChildren(...context.incoming.map(choice =>
     linkToLine(choice.line.id, `${choice.text} ← ${shortLabel(choice.line)}`)));
   byId("incoming").hidden = context.incoming.length === 0;
+  byId("incoming-more").hidden = context.nextIncoming == null;
   byId("choices").replaceChildren(...context.outgoing.map((choice, index) =>
-    choiceForm(choice, undefined, index === 0, index === context.outgoing.length - 1)));
+    choiceForm(choice, undefined, index === 0 && !after, index === context.outgoing.length - 1 && context.nextOutgoingPosition == null)));
+  byId("choices-first").hidden = !after;
+  byId("choices-more").hidden = context.nextOutgoingPosition == null;
   byId("new-choice").hidden = line.isEnding;
   byId("new-choice").onclick = run(() => {
-    const position = Math.max(0, ...context.outgoing.map(choice => choice.position));
-    const form = choiceForm(null, position < 2147483647 ? position + 1 : 1);
+    const form = choiceForm(null, context.suggestedChoicePosition);
     byId("choices").append(form);
     drafts.watch(form);
     byId("new-choice").hidden = true;
     form.elements.text.focus();
   });
-  drafts.reset(lineForm, ...byId("choices").querySelectorAll("form"));
+  drafts.reset(lineForm, renameDialogueForm, minimumLevelForm, ...byId("choices").querySelectorAll("form"));
 }
 
 function choiceForm(choice, position, first = false, last = false) {
@@ -124,6 +160,8 @@ function choiceForm(choice, position, first = false, last = false) {
   form.innerHTML = `
     <label>Ответ <input name="text" maxlength="500" required></label>
     <label>Следующая реплика <select name="targetLineId" required></select></label>
+    <label>Поиск цели <input type="search" class="target-search" maxlength="160"></label>
+    <button type="button" class="targets-more" hidden>Показать ещё цели</button>
     <label>Позиция <input name="position" type="number" min="1" max="2147483647" required></label>
     <details>
       <summary>Состояние сюжета</summary>
@@ -143,7 +181,12 @@ function choiceForm(choice, position, first = false, last = false) {
   fields.requiredState.value = choice?.requiredState ?? "";
   fields.nextState.value = choice?.nextState ?? "";
   form.querySelector("details").open = Boolean(choice?.requiredState || choice?.nextState);
-  setOptions(fields.targetLineId, state.lines, shortLabel, choice?.line.id);
+  createPagedSelect({
+    select: fields.targetLineId, search: form.querySelector(".target-search"), more: form.querySelector(".targets-more"),
+    endpoint: () => `${path()}/lines/page`, itemEndpoint: id => `${path()}/lines/${id}/context`,
+    readItem: context => context.line, label: shortLabel, initialPage: state.targetPage,
+    selectedRecord: choice?.line ?? state.targetPage.items[0] ?? state.line
+  });
   fields.target.hidden = !choice;
   fields.target.onclick = run(() => selectLine(choice.line.id));
   for (const [button, direction, boundary] of [[fields.moveUp, -1, first], [fields.moveDown, 1, last]]) {
@@ -153,7 +196,8 @@ function choiceForm(choice, position, first = false, last = false) {
       if (!drafts.confirmDiscard()) return;
       await api(`${linePath()}/choices/${choice.id}/move`, "POST", { direction, version: choice.version });
       hideValidation();
-      await selectLine(state.line.id, true);
+      const moved = await api(`${linePath()}/choices/${choice.id}`);
+      await selectLine(state.line.id, true, moved.position);
       await dialogueMap.refresh();
     });
   }
@@ -161,7 +205,7 @@ function choiceForm(choice, position, first = false, last = false) {
   fields.removeChoice.onclick = run(async () => {
     if (choice) {
       if (!drafts.confirmDiscard(form)) return;
-      await api(`${linePath()}/choices/${choice.id}`, "DELETE");
+      await api(`${linePath()}/choices/${choice.id}`, "DELETE", { version: choice.version });
       hideValidation();
       await selectLine(state.line.id, true);
       await dialogueMap.refresh();
@@ -182,7 +226,7 @@ function choiceForm(choice, position, first = false, last = false) {
       version: choice?.version
     });
     hideValidation();
-    await selectLine(state.line.id, true);
+    await selectLine(state.line.id, true, Number(fields.position.value));
     await dialogueMap.refresh();
   });
   return form;
@@ -194,8 +238,8 @@ async function openEditor() {
   editorContent.hidden = true;
   byId("show-map").hidden = true;
   state.dialogue = null;
+  dialogueMap.reset();
   byId("preview-step").replaceChildren();
-  state.characters = await api("/api/characters");
   try {
     await loadDialogue(id, Number(query.get("line")));
   } catch (error) {
@@ -355,8 +399,8 @@ function renderStep(step) {
 }
 
 renameDialogueForm.onsubmit = run(async () => {
-  if (!drafts.confirmDiscard()) return;
-  await api(path(), "PUT", { title: renameDialogueForm.elements.title.value });
+  if (!drafts.confirmDiscard(renameDialogueForm)) return;
+  await api(path(), "PUT", { title: renameDialogueForm.elements.title.value, version: state.dialogue.version });
   await loadDialogue(state.dialogue.id, state.line?.id);
   byId("status").textContent = `Диалог переименован в «${state.dialogue.title}».`;
 });
@@ -364,7 +408,7 @@ byId("delete-dialogue").onclick = run(async () => {
   const title = state.dialogue.title;
   if (!window.confirm(`Удалить диалог «${title}» вместе с репликами, переходами, версиями и историей прохождений?`)) return;
 
-  await api(path(), "DELETE");
+  await api(path(), "DELETE", { version: state.dialogue.deleteVersion });
   drafts.reset();
   location.assign("/");
 });
@@ -383,11 +427,35 @@ byId("new-character").onsubmit = run(async event => {
   const form = event.currentTarget;
   const character = await api("/api/characters", "POST", Object.fromEntries(new FormData(form)));
   form.reset();
-  state.characters = await api("/api/characters");
-  setOptions(lineForm.elements.speakerId, state.characters, characterLabel, character.id);
+  speakerPicker.choose(character);
   byId("status").textContent = `Персонаж «${character.name}» добавлен.`;
 });
 byId("new-line").onclick = run(() => selectLine(null));
+async function loadLines(before) {
+  const request = ++linesGeneration;
+  const query = new URLSearchParams({ q: byId("line-search").value.trim() });
+  if (before != null) query.set("before", before);
+  const page = await api(`${path()}/lines/page?${query}`);
+  if (request !== linesGeneration) return;
+  state.lines = before == null ? page.items : [...state.lines, ...page.items];
+  linesCursor = page.nextBeforeId;
+  listLinks("lines", state.lines, "Реплики не найдены.");
+  byId("lines-more").hidden = linesCursor == null;
+}
+byId("line-search").oninput = () => {
+  linesGeneration++;
+  clearTimeout(linesTimer);
+  linesTimer = setTimeout(run(() => loadLines()), 250);
+};
+byId("lines-more").onclick = run(() => loadLines(linesCursor));
+byId("branches-more").onclick = run(async () => {
+  if (branchesCursor == null) return;
+  const page = await api(`${path()}/lines/page?branchesOnly=true&before=${branchesCursor}`);
+  state.branches.push(...page.items);
+  branchesCursor = page.nextBeforeId;
+  listLinks("branches", state.branches, "Сюжетные развилки не отмечены.");
+  byId("branches-more").hidden = branchesCursor == null;
+});
 lineForm.onsubmit = run(async () => {
   if (!drafts.confirmDiscard(lineForm)) return;
   const fields = lineForm.elements;
@@ -402,26 +470,27 @@ lineForm.onsubmit = run(async () => {
 });
 byId("set-start").onclick = run(async () => {
   if (!drafts.confirmDiscard()) return;
-  await api(`${path()}/start`, "PUT", { lineId: state.line.id });
+  await api(`${path()}/start`, "PUT", { lineId: state.line.id, version: state.dialogue.version });
   await loadDialogue(state.dialogue.id, state.line.id);
 });
 byId("clear-start").onclick = run(async () => {
   if (!drafts.confirmDiscard()) return;
-  await api(`${path()}/start`, "PUT", { lineId: null });
+  await api(`${path()}/start`, "PUT", { lineId: null, version: state.dialogue.version });
   await loadDialogue(state.dialogue.id, state.line.id);
 });
 byId("delete-line").onclick = run(async () => {
+  if (!drafts.confirmDiscard()) return;
   if (window.confirm("Удалить реплику и её исходящие варианты?")) {
-    await api(linePath(), "DELETE");
+    await api(linePath(), "DELETE", { version: state.deleteVersion });
     await loadDialogue(state.dialogue.id);
   }
 });
 minimumLevelForm.onsubmit = run(async () => {
+  if (!drafts.confirmDiscard(minimumLevelForm)) return;
   const field = minimumLevelForm.elements.minimumPlayerLevel;
   const minimum = field.value === "" ? null : field.valueAsNumber;
-  await api(`${path()}/minimum-level`, "PUT", { minimumPlayerLevel: minimum });
-  state.dialogue.minimumPlayerLevel = minimum;
-  renderLevelSettings();
+  await api(`${path()}/minimum-level`, "PUT", { minimumPlayerLevel: minimum, version: state.dialogue.version });
+  await loadDialogue(state.dialogue.id, state.line?.id);
   byId("status").textContent = minimum == null ? "Ограничение по уровню снято." : "Минимальный уровень сохранён.";
 });
 byId("validate-dialogue").onclick = run(async () => {
@@ -429,6 +498,27 @@ byId("validate-dialogue").onclick = run(async () => {
   renderValidation(await api(`${path()}/validation`));
 });
 const refreshHistory = run(() => loadPreviewHistory());
+byId("choices-first").onclick = run(() => selectLine(state.line.id));
+byId("choices-more").onclick = run(async () => {
+  if (contextPage?.nextOutgoingPosition == null) return;
+  const page = await api(`${linePath()}/context?outgoingAfter=${contextPage.nextOutgoingPosition}&version=${contextPage.dialogue.version}`);
+  for (let index = 0; index < page.outgoing.length; index++) {
+    const form = choiceForm(page.outgoing[index], undefined, false,
+      index === page.outgoing.length - 1 && page.nextOutgoingPosition == null);
+    byId("choices").append(form);
+    drafts.watch(form);
+  }
+  contextPage.nextOutgoingPosition = page.nextOutgoingPosition;
+  byId("choices-more").hidden = page.nextOutgoingPosition == null;
+});
+byId("incoming-more").onclick = run(async () => {
+  const cursor = contextPage?.nextIncoming;
+  if (!cursor) return;
+  const page = await api(`${linePath()}/context?incomingAfterLine=${cursor.sourceLineId}&incomingAfterPosition=${cursor.position}&version=${contextPage.dialogue.version}`);
+  byId("incoming").append(...page.incoming.map(choice => linkToLine(choice.line.id, `${choice.text} ← ${shortLabel(choice.line)}`)));
+  contextPage.nextIncoming = page.nextIncoming;
+  byId("incoming-more").hidden = page.nextIncoming == null;
+});
 previewHistory.ontoggle = () => {
   if (previewHistory.open) refreshHistory();
 };
