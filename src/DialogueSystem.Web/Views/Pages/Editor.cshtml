@@ -74,24 +74,6 @@
       <ul id="revision-list" class="revision-list"></ul>
       <button type="button" id="revision-more" hidden>Показать более ранние версии</button>
     </details>
-    <details id="cleanup-panel" class="dialogue-actions">
-      <summary>Очистка истории и версий</summary>
-      <p>Удаляются завершённые прохождения с известной датой и выбранные сохранённые версии. Можно явно включить прохождения с удалённой текущей репликой. Рабочий диалог сохраняется.</p>
-      <form id="cleanup-form" class="actions">
-        <label>Старше даты <input name="before" type="datetime-local" required></label>
-        <label>Сохранить последних в каждой выбранной категории
-          <input name="keepLatest" type="number" min="1" max="1000" step="1" value="20" required>
-        </label>
-        <label><input name="previews" type="checkbox" checked> Прохождения и их история</label>
-        <label><input name="includeInterruptedPreviews" type="checkbox"> Включить прохождения с удалённой текущей репликой</label>
-        <label><input name="revisions" type="checkbox"> Сохранённые версии</label>
-        <label id="cleanup-all-users" hidden><input name="allUsers" type="checkbox"> Данные всех пользователей (администратор)</label>
-        <button>Рассчитать очистку</button>
-      </form>
-      <p>По умолчанию выбираются только ваши данные. Перед удалением сервер создаёт резервную копию; хранятся три последние копии перед очисткой. За один раз удаляется не более 100 прохождений и 100 версий.</p>
-      <p id="cleanup-status" role="status"></p>
-      <button id="cleanup-apply" type="button" disabled>Подтвердить рассчитанное удаление</button>
-    </details>
     <div class="actions dialogue-actions">
       <label><input type="checkbox" id="copy-characters"> Создать отдельных персонажей для копии</label>
       <button type="button" id="copy-dialogue">Копировать диалог</button>
@@ -177,5 +159,5 @@
 </div>
 
 @section Scripts {
-    <script type="module" src="/editor.js"></script>
+    @await Html.PartialAsync("_PageScript", "editor.js")
 }

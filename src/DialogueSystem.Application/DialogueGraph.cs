@@ -8,11 +8,6 @@ internal sealed record DialogueGraphLine(int Id, int SpeakerId, string Speaker, 
 public sealed record DialogueGraphChoice(int Id, int SourceLineId, int TargetLineId, string Text, int Position,
     string? RequiredState, string? NextState);
 internal readonly record struct StoryPosition(int LineId, string? State);
-internal readonly record struct GraphChoiceKey(int SourceLineId, int Position)
-{
-    public static GraphChoiceKey From(DialogueGraphChoice choice) => new(choice.SourceLineId, choice.Position);
-}
-
 public sealed class DialogueGraph
 {
     public string Title { get; }
@@ -21,8 +16,7 @@ public sealed class DialogueGraph
     public long Revision { get; }
     public bool ContainsLine(int lineId) => _lines.ContainsKey(lineId);
     public bool IsEnding(int lineId) => _lines.TryGetValue(lineId, out var line) && line.IsEnding;
-    internal IReadOnlyDictionary<int, DialogueGraphLine> Lines => _lines;
-    internal IReadOnlyList<DialogueGraphChoice> Choices { get; }
+    private IReadOnlyList<DialogueGraphChoice> Choices { get; }
     internal IEnumerable<DialogueGraphChoice> Outgoing(int lineId) => _outgoing[lineId];
 
     private readonly object _validationLock = new();
@@ -38,13 +32,6 @@ public sealed class DialogueGraph
             dialogue.Lines.Select(line => new DialogueGraphLine(line.Id, line.SpeakerId, line.Speaker.Name,
                 line.Speaker.Key, line.Text, line.IsEnding, line.IsStoryBranch)),
             choices.Select(choice => new DialogueGraphChoice(choice.Id, choice.SourceLineId, choice.TargetLineId,
-                choice.Text, choice.Position, choice.RequiredState, choice.NextState))) { }
-
-    public DialogueGraph(DialogueDocument document)
-        : this(document.Title, document.StartLineId, document.MinimumPlayerLevel, 0,
-            document.Lines.Select(line => new DialogueGraphLine(line.Id, 0, line.Speaker, line.SpeakerKey,
-                line.Text, line.IsEnding, line.IsStoryBranch)),
-            document.Choices.Select(choice => new DialogueGraphChoice(0, choice.SourceLineId, choice.TargetLineId,
                 choice.Text, choice.Position, choice.RequiredState, choice.NextState))) { }
 
     private DialogueGraph(string title, int? start, int? level, long revision,
@@ -164,7 +151,7 @@ public sealed class DialogueGraph
     {
         var walk = DialogueTraversal.Explore(this, ct);
         if (!walk.Complete) throw new ValidationLimitException();
-        var reachable = walk.Visits.Keys.ToHashSet();
+        var reachable = walk.Positions.ToHashSet();
         if (preview is null) _basePositions = reachable;
         var reachableLineIds = reachable.Select(position => position.LineId).ToHashSet();
         if (!reachableLineIds.Any(id => _lines[id].IsEnding)) issues.Add(NoReachableEnding(startLineId));
@@ -173,10 +160,10 @@ public sealed class DialogueGraph
         {
             walk.ContinueFrom(new(preview.CurrentLineId, preview.StoryState), ct);
             if (!walk.Complete) throw new ValidationLimitException();
-            reachable = walk.Visits.Keys.ToHashSet();
+            reachable = walk.Positions.ToHashSet();
         }
         var canReachEnding = walk.CanReachEnding(ct);
-        var endings = walk.FirstEndingPositions.Values;
+        var endings = walk.Positions.Where(position => IsEnding(position.LineId));
 
         foreach (var endingId in endings.Select(position => position.LineId).Distinct().Order())
         {

@@ -39,11 +39,7 @@ function card(dialogue) {
     group.append(name, count);
     statistics.append(group);
   }
-  const analysis = document.createElement("a");
-  analysis.href = `${dialogueUrl(dialogue.id)}/analysis`;
-  analysis.textContent = "Маршруты";
-  analysis.setAttribute("aria-label", `Маршруты диалога «${dialogue.title}»`);
-  item.append(heading, details, statistics, analysis);
+  item.append(heading, details, statistics);
   return item;
 }
 

@@ -11,8 +11,6 @@ public interface IDialogueCatalog
     Task<DialogueMapSnapshot?> MapAsync(int id, CancellationToken ct);
     Task<DialogueSummary> ImportAsync(DialogueDocument document, CancellationToken ct);
     Task<DialogueSummary?> CopyAsync(int id, bool cloneCharacters, CancellationToken ct);
-    Task<DialogueAnalysisReport?> AnalyzeAsync(int id, CancellationToken ct);
-    Task<DialogueRouteResult?> FindShortestRouteAsync(int id, int endingId, CancellationToken ct);
     Task<DialogueValidation?> ValidateAsync(int id, CancellationToken ct);
 }
 

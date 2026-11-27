@@ -1,0 +1,9 @@
+@model string
+<script type="module">
+  try {
+    await import("@FrontendAssets.Url(Model)");
+  } catch (error) {
+    console.error("Не удалось запустить интерфейс.", error);
+    document.getElementById("status").textContent = "Не удалось загрузить интерфейс. Обновите страницу; если ошибка повторяется, перезапустите сервер.";
+  }
+</script>

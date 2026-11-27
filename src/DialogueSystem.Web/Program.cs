@@ -11,6 +11,8 @@ var dataDirectory = Directory.CreateDirectory(
     Path.Combine(builder.Environment.ContentRootPath, "App_Data"));
 
 builder.Services.AddDialogueStorage(dataDirectory.FullName);
+builder.Services.AddSingleton(services => new FrontendAssets(
+    services.GetRequiredService<IWebHostEnvironment>().WebRootFileProvider));
 builder.Services.AddSingleton(_ => new DataDirectoryLease(dataDirectory.FullName));
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddDataProtection().PersistKeysToFileSystem(dataDirectory.CreateSubdirectory("keys"));
@@ -82,7 +84,16 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
     app.UseHttpsRedirection();
 }
-app.UseStaticFiles();
+var frontend = app.Services.GetRequiredService<FrontendAssets>();
+app.UseStaticFiles(new StaticFileOptions
+{
+    RequestPath = frontend.Prefix,
+    OnPrepareResponse = context => context.Context.Response.Headers.CacheControl = "no-cache"
+});
+app.UseStaticFiles(new StaticFileOptions
+{
+    OnPrepareResponse = context => context.Context.Response.Headers.CacheControl = "no-cache"
+});
 app.UseStatusCodePages(ApiErrors.WriteAsync);
 app.UseAuthentication();
 app.UseMiddleware<ApiAccessMiddleware>();

@@ -25,7 +25,6 @@ public static class StorageRegistration
             .AddScoped<IPasswordService, PasswordService>()
             .AddScoped<IDialogueCatalog, SqliteDialogueCatalog>()
             .AddScoped<IDialogueRevisions, SqliteRevisions>()
-            .AddScoped<IDialogueCleanup, SqliteCleanup>()
             .AddScoped<ICharacterCatalog, SqliteCharacterCatalog>()
             .AddScoped<ILineEditor, SqliteLines>()
             .AddScoped<IPreviewService, SqlitePreviews>();

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>@ViewData["Title"]</title>
-  <link rel="stylesheet" href="/editor.css">
+  <link rel="stylesheet" href="@FrontendAssets.Url("editor.css")">
 </head>
 <body>
   <header>
@@ -13,6 +13,7 @@
   </header>
   <main>
     <p id="status" role="status"></p>
+    <noscript>Для работы с диалогами включите JavaScript в браузере.</noscript>
     <form id="login" hidden>
       <label>Имя пользователя <input name="login" autocomplete="username" required></label>
       <label>Пароль <input name="password" type="password" autocomplete="current-password" required></label>

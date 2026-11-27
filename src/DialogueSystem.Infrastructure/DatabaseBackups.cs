@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace DialogueSystem.Infrastructure;
 
-public enum BackupKind { Daily, Migration, Manual, Recovery, Cleanup }
+public enum BackupKind { Daily, Migration, Manual, Recovery }
 public sealed record DatabaseBackup(string Path, BackupKind Kind, long Size);
 public sealed record DatabaseRestore(string PreservedDirectory);
 
@@ -51,7 +51,6 @@ public sealed class DatabaseBackups(string directory, TimeProvider? clock = null
             File.Move(staging, path);
             Prune(BackupKind.Daily, 7);
             Prune(BackupKind.Migration, 3);
-            Prune(BackupKind.Cleanup, 3);
             return new(path, kind, new FileInfo(path).Length);
         }
         finally { DeleteFileSet(staging); }

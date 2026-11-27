@@ -104,13 +104,6 @@ internal sealed class SqliteDialogueCatalog(DialogueDbContext db, GraphSnapshots
     public Task<DialogueValidation?> ValidateAsync(int id, CancellationToken ct) =>
         ReadGraphAsync(id, graph => graph.Validate(ct: ct), ct);
 
-    public Task<DialogueAnalysisReport?> AnalyzeAsync(int id, CancellationToken ct) =>
-        ReadGraphAsync(id, graph => DialogueRouteAnalysis.Analyze(graph, ct), ct);
-
-    public Task<DialogueRouteResult?> FindShortestRouteAsync(int id, int endingId, CancellationToken ct) =>
-        ReadGraphAsync<DialogueRouteResult>(id, graph => graph.IsEnding(endingId)
-            ? DialogueRouteAnalysis.FindShortestRoute(graph, endingId, ct) : null, ct);
-
     private async Task<T?> ReadGraphAsync<T>(int id, Func<DialogueGraph, T?> select, CancellationToken ct)
         where T : class
     {

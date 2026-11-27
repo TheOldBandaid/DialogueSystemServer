@@ -40,5 +40,5 @@
 </section>
 
 @section Scripts {
-    <script type="module" src="/characters.js"></script>
+    @await Html.PartialAsync("_PageScript", "characters.js")
 }
