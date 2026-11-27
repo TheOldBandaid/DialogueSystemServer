@@ -1,3 +1,4 @@
+using System.ComponentModel.DataAnnotations;
 using DialogueSystem.Application;
 using Microsoft.Extensions.DependencyInjection;
 using static System.Net.HttpStatusCode;
@@ -62,5 +63,24 @@ public sealed class AccountRecoveryTests
         await client.Login("editor", password);
         Assert.Equal(AccountRoles.Administrator, (await client.Get<AccountSummary>("/api/accounts/me")).Role);
         await client.Expect(OK, HttpMethod.Get, "/api/accounts");
+    }
+
+    [Fact]
+    public async Task RejectedLocalPasswordLeavesThePasswordRoleAndSessionUnchanged()
+    {
+        using var data = new DialogueTestData();
+        var password = Guid.NewGuid().ToString("N");
+        await using var app = data.Start(settings: [new("DialogueSystem:EditorPassword", password)]);
+        using var client = new DialogueApiClient(app);
+        await client.Login("editor", password);
+        var before = await client.Get<AccountSummary>("/api/accounts/me");
+        using (var scope = app.Services.CreateScope())
+        {
+            var accounts = scope.ServiceProvider.GetRequiredService<AccountService>();
+            await Assert.ThrowsAsync<ValidationException>(() => accounts.RecoverAdministratorAsync("editor", new string(' ', 12), default));
+            Assert.NotNull(await accounts.AuthenticateAsync("editor", password, default));
+        }
+        Assert.Equal(before, await client.Get<AccountSummary>("/api/accounts/me"));
+        await client.Login("editor", password);
     }
 }

@@ -20,6 +20,8 @@ public static partial class AccountRules
 
     public static void ValidatePassword(string password)
     {
+        if (string.IsNullOrWhiteSpace(password))
+            throw new ValidationException("Пароль не может состоять только из пробельных символов.");
         if (password.Length is < MinimumPasswordLength or > MaximumPasswordLength)
             throw new ValidationException("Пароль должен содержать от 12 до 512 символов.");
     }

@@ -13,14 +13,16 @@ function Read-DemoPassword([string] $Login) {
     while ($true) {
         $password = Read-Host "Пароль для $Login (от 12 до 512 символов)" -AsSecureString
         try {
-            if ($password.Length -ge 12 -and $password.Length -le 512) {
-                return [System.Net.NetworkCredential]::new('', $password).Password
+            $plainPassword = [System.Net.NetworkCredential]::new('', $password).Password
+            if ($plainPassword.Length -ge 12 -and $plainPassword.Length -le 512 -and
+                ![string]::IsNullOrWhiteSpace($plainPassword)) {
+                return $plainPassword
             }
         }
         finally {
             $password.Dispose()
         }
-        Write-Warning 'Введённый пароль не подходит по длине.'
+        Write-Warning 'Пароль должен содержать от 12 до 512 символов и не может состоять только из пробелов.'
     }
 }
 

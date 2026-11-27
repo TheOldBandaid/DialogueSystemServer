@@ -23,6 +23,20 @@ public sealed class AccountInitializationTests
     }
 
     [Fact]
+    public async Task InitialPasswordPreservesLeadingTrailingAndInternalSpacesDuringHttpLogin()
+    {
+        using var data = new DialogueTestData();
+        await using var app = data.Start();
+        const string password = "  password with spaces  ";
+        using (var scope = app.Services.CreateScope())
+            Assert.True(await scope.ServiceProvider.GetRequiredService<AccountService>().EnsureAsync("editor", password, AccountRoles.Editor, default));
+        using var client = new DialogueApiClient(app);
+        await client.Login("editor", password);
+        await client.Login("editor", password.Trim(), System.Net.HttpStatusCode.Unauthorized);
+        await client.Login("editor", password);
+    }
+
+    [Fact]
     public void DataDirectoryCannotBeOpenedTwiceUntilTheLeaseIsReleased()
     {
         var directory = Directory.CreateTempSubdirectory("dialogue-lock-");
