@@ -411,10 +411,14 @@ renameDialogueForm.onsubmit = run(async () => {
   byId("status").textContent = `Диалог переименован в «${state.dialogue.title}».`;
 });
 byId("delete-dialogue").onclick = run(async () => {
-  const title = state.dialogue.title;
-  if (!window.confirm(`Удалить диалог «${title}» вместе с репликами, переходами, версиями и историей прохождений?`)) return;
+  const current = await api(path());
+  if (current.version !== state.dialogue.version)
+    throw new Error("Диалог изменился. Обновите страницу и проверьте его перед удалением.");
+  const changed = current.deleteVersion !== state.dialogue.deleteVersion
+    ? "После открытия диалога изменились версии или история прохождений.\n" : "";
+  if (!window.confirm(`${changed}Удалить диалог «${current.title}» вместе с репликами, переходами, версиями и историей прохождений?`)) return;
 
-  await api(path(), "DELETE", { version: state.dialogue.deleteVersion });
+  await api(path(), "DELETE", { version: current.deleteVersion });
   drafts.reset();
   location.assign("/");
 });
