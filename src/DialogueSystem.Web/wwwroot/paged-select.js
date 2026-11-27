@@ -48,13 +48,25 @@ export function createPagedSelect({ select, search, more, endpoint, itemEndpoint
 
   async function refresh(id) {
     if (!await load(true)) return null;
-    if (id != null && id > 0) {
-      let record = records.get(id);
-      if (!record || !loaded.has(id)) {
-        try { record = readItem(await api(itemEndpoint(id))); }
-        catch (error) { if (error.status !== 404) throw error; }
+    const request = generation;
+    const wantedId = id ?? current()?.id;
+    if (wantedId != null && wantedId > 0) {
+      let record = records.get(wantedId);
+      if (!record || !loaded.has(wantedId)) {
+        try { record = readItem(await api(itemEndpoint(wantedId))); }
+        catch (error) {
+          if (error.status !== 404) throw error;
+          record = null;
+        }
       }
-      if (record) { records.set(id, record); selected = record; render(); }
+      if (request !== generation || !select.isConnected) return null;
+      if (record) { records.set(wantedId, record); selected = record; }
+      else {
+        records.delete(wantedId);
+        loaded.delete(wantedId);
+        if (selected?.id === wantedId) selected = null;
+      }
+      render();
     }
     return current();
   }

@@ -37,8 +37,11 @@ internal static class DialogueGraphLoader
         {
             var textSize = 2 * (dialogue.Lines.Sum(line => (long)line.Text.Length + line.Speaker.Name.Length) +
                 choices.Sum(choice => (long)choice.Text.Length + (choice.RequiredState?.Length ?? 0) + (choice.NextState?.Length ?? 0)));
-            var estimatedSize = textSize + 256L * (dialogue.Lines.Count + choices.Count) +
-                160L * DialogueLimits.MaximumPositions;
+            var states = choices.Any(choice => choice.RequiredState is not null)
+                ? choices.Select(choice => choice.NextState).Append(null).Distinct(StringComparer.Ordinal).Count()
+                : 1;
+            var positions = Math.Min(DialogueLimits.MaximumPositions, (long)dialogue.Lines.Count * states);
+            var estimatedSize = 1024L + textSize + 256L * (dialogue.Lines.Count + choices.Count) + 160L * positions;
             cache.Set(dialogueId, revision.Value, graph, estimatedSize);
         }
         return graph;
