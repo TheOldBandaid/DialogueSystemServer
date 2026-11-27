@@ -67,6 +67,24 @@ if (!app.Environment.IsDevelopment())
 }
 app.UseStaticFiles();
 app.UseAuthentication();
+app.Use(async (context, next) =>
+{
+    var path = context.Request.Path.Value?.TrimEnd('/').ToLowerInvariant();
+    if (context.User.Identity?.IsAuthenticated == true && SessionPrincipal.MustChangePassword(context.User) &&
+        context.Request.Path.StartsWithSegments("/api", StringComparison.OrdinalIgnoreCase) &&
+        path is not ("/api/accounts/me" or "/api/accounts/me/password" or "/api/accounts/logout" or "/api/accounts/csrf"))
+    {
+        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+        await context.Response.WriteAsJsonAsync(new Microsoft.AspNetCore.Mvc.ProblemDetails
+        {
+            Status = StatusCodes.Status403Forbidden,
+            Detail = "Перед работой необходимо сменить временный пароль.",
+            Extensions = { ["code"] = "password-change-required" }
+        });
+        return;
+    }
+    await next(context);
+});
 app.UseAuthorization();
 app.UseRateLimiter();
 app.MapControllers();

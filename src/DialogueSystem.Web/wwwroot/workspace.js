@@ -107,6 +107,34 @@ function accountRow(account) {
   });
   form.append(label, save);
   row.append(form);
+  const reset = document.createElement("form");
+  reset.className = "actions";
+  const current = document.createElement("input");
+  current.type = "password";
+  current.autocomplete = "current-password";
+  current.required = true;
+  current.maxLength = 512;
+  current.placeholder = "Пароль администратора";
+  current.setAttribute("aria-label", "Пароль администратора для сброса");
+  const temporary = document.createElement("input");
+  temporary.type = "password";
+  temporary.autocomplete = "new-password";
+  temporary.required = true;
+  temporary.minLength = 12;
+  temporary.maxLength = 512;
+  temporary.placeholder = "Временный пароль";
+  temporary.setAttribute("aria-label", `Временный пароль для ${account.login}`);
+  const submit = document.createElement("button");
+  submit.textContent = "Выдать временный пароль";
+  reset.onsubmit = run(async () => {
+    await accountRequest(`/api/accounts/${account.id}/password`, "POST", {
+      currentPassword: current.value, temporaryPassword: temporary.value
+    });
+    reset.reset();
+    byId("status").textContent = `Пользователю «${account.login}» нужно войти с временным паролем и сменить его.`;
+  });
+  reset.append(current, temporary, submit);
+  row.append(reset);
   return row;
 }
 
@@ -151,8 +179,15 @@ export function downloadJson(data, name) {
 
 export async function initializeWorkspace(loadPage) {
   async function showWorkspace(profile) {
-    showAccountManagement(profile);
-    await loadPage();
+    const mustChange = profile.mustChangePassword === true;
+    showAccountManagement(mustChange ? null : profile);
+    byId("page-content").hidden = mustChange;
+    if (mustChange) {
+      byId("my-account").open = true;
+      byId("status").textContent = "Перед работой смените временный пароль в разделе «Моя учётная запись».";
+    } else {
+      await loadPage();
+    }
     login.hidden = true;
     workspace.hidden = false;
     byId("logout").hidden = false;

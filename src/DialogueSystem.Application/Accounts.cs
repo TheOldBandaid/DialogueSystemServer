@@ -9,15 +9,16 @@ public static class AccountRoles
     public const string Pattern = Administrator + "|" + Editor;
 }
 
-public sealed record AccountSummary(int Id, string Login, string Role);
+public sealed record AccountSummary(int Id, string Login, string Role, bool MustChangePassword = false);
 
-public sealed record AccountSession(int Id, string Login, string Role, int Version)
+public sealed record AccountSession(int Id, string Login, string Role, int Version, bool MustChangePassword = false)
 {
-    public AccountSummary Summary => new(Id, Login, Role);
+    public AccountSummary Summary => new(Id, Login, Role, MustChangePassword);
 }
 
 public enum RoleChange { Changed, NotFound, LastAdministrator }
 public enum PasswordChange { Changed, WrongPassword, SamePassword, StaleAccount }
+public enum PasswordReset { Changed, NotFound, WrongPassword, Forbidden, OwnAccount, StaleAccount }
 public sealed record InitialAccountsStatus(bool AdminExists, bool EditorExists, bool HasAdministrator);
 
 public interface IPasswordService
@@ -37,7 +38,7 @@ public interface IAccountStore
     Task AddAsync(Account account, CancellationToken ct);
     Task<bool> HasOtherAdministratorAsync(int id, CancellationToken ct);
     Task SetRoleAsync(int id, string role, CancellationToken ct);
-    Task<bool> ChangePasswordAsync(int id, int version, string hash, CancellationToken ct);
+    Task<bool> ChangePasswordAsync(int id, int version, string hash, CancellationToken ct, bool mustChange = false);
 }
 
 public sealed class AccountService(IAccountStore store, IPasswordService passwords)
@@ -48,7 +49,7 @@ public sealed class AccountService(IAccountStore store, IPasswordService passwor
         if (account is null || !passwords.Verify(account, password))
             return null;
 
-        return new(account.Id, account.Login, account.Role, account.SessionVersion);
+        return new(account.Id, account.Login, account.Role, account.SessionVersion, account.MustChangePassword);
     }
 
     public Task<AccountSession?> GetSessionAsync(int id, CancellationToken ct) => store.GetSessionAsync(id, ct);
@@ -112,5 +113,42 @@ public sealed class AccountService(IAccountStore store, IPasswordService passwor
         return await store.ChangePasswordAsync(id, account.SessionVersion, hash, ct)
             ? PasswordChange.Changed
             : PasswordChange.StaleAccount;
+    }
+
+    public async Task<PasswordReset> ResetPasswordAsync(int administratorId, int targetId,
+        string currentPassword, string temporaryPassword, CancellationToken ct)
+    {
+        AccountRules.ValidatePassword(temporaryPassword);
+        var administrator = await store.FindByIdAsync(administratorId, ct);
+        if (administrator is null || administrator.Role != AccountRoles.Administrator || administrator.MustChangePassword)
+            return PasswordReset.Forbidden;
+        if (!passwords.Verify(administrator, currentPassword)) return PasswordReset.WrongPassword;
+        if (administratorId == targetId) return PasswordReset.OwnAccount;
+        var account = await store.FindByIdAsync(targetId, ct);
+        if (account is null) return PasswordReset.NotFound;
+        var hash = passwords.Hash(account, temporaryPassword);
+        await using var transaction = await store.BeginAsync(ct);
+        // Recheck authority inside the write transaction after the expensive password verification.
+        var currentAdministrator = await store.GetSessionAsync(administratorId, ct);
+        if (currentAdministrator is null || currentAdministrator.Role != AccountRoles.Administrator ||
+            currentAdministrator.MustChangePassword || currentAdministrator.Version != administrator.SessionVersion)
+            return PasswordReset.Forbidden;
+        if (!await store.ChangePasswordAsync(targetId, account.SessionVersion, hash, ct, mustChange: true))
+            return PasswordReset.StaleAccount;
+        await transaction.CommitAsync(ct);
+        return PasswordReset.Changed;
+    }
+
+    public async Task<bool> RecoverAdministratorAsync(string login, string newPassword, CancellationToken ct)
+    {
+        AccountRules.ValidatePassword(newPassword);
+        var account = await store.FindByLoginAsync(AccountRules.NormalizeLogin(login), ct);
+        if (account is null) return false;
+        var hash = passwords.Hash(account, newPassword);
+        await using var transaction = await store.BeginAsync(ct);
+        if (!await store.ChangePasswordAsync(account.Id, account.SessionVersion, hash, ct)) return false;
+        await store.SetRoleAsync(account.Id, AccountRoles.Administrator, ct);
+        await transaction.CommitAsync(ct);
+        return true;
     }
 }

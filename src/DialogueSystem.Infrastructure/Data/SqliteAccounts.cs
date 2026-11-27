@@ -14,12 +14,12 @@ internal sealed class SqliteAccounts(DialogueDbContext db) : IAccountStore
 
     public Task<AccountSession?> GetSessionAsync(int id, CancellationToken ct) =>
         db.Accounts.Where(account => account.Id == id)
-            .Select(account => new AccountSession(account.Id, account.Login, account.Role, account.SessionVersion))
+            .Select(account => new AccountSession(account.Id, account.Login, account.Role, account.SessionVersion, account.MustChangePassword))
             .SingleOrDefaultAsync(ct);
 
     public async Task<IReadOnlyList<AccountSummary>> ListAsync(CancellationToken ct) =>
         await db.Accounts.OrderBy(account => account.Login)
-            .Select(account => new AccountSummary(account.Id, account.Login, account.Role))
+            .Select(account => new AccountSummary(account.Id, account.Login, account.Role, account.MustChangePassword))
             .ToListAsync(ct);
 
     public async Task<InitialAccountsStatus> InitialStatusAsync(CancellationToken ct)
@@ -46,11 +46,12 @@ internal sealed class SqliteAccounts(DialogueDbContext db) : IAccountStore
         db.Accounts.Where(account => account.Id == id)
             .ExecuteUpdateAsync(setters => setters.SetProperty(account => account.Role, role), ct);
 
-    public async Task<bool> ChangePasswordAsync(int id, int version, string hash, CancellationToken ct)
+    public async Task<bool> ChangePasswordAsync(int id, int version, string hash, CancellationToken ct, bool mustChange = false)
     {
         var updated = await db.Accounts.Where(account => account.Id == id && account.SessionVersion == version)
             .ExecuteUpdateAsync(setters => setters
                 .SetProperty(account => account.PasswordHash, hash)
+                .SetProperty(account => account.MustChangePassword, mustChange)
                 .SetProperty(account => account.SessionVersion, account => account.SessionVersion + 1), ct);
         return updated != 0;
     }

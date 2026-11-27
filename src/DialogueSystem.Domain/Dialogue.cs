@@ -77,4 +77,5 @@ public sealed class Account
     public required string PasswordHash { get; set; }
     public required string Role { get; set; }
     public int SessionVersion { get; set; }
+    public bool MustChangePassword { get; set; }
 }

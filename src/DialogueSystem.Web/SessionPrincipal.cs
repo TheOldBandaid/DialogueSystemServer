@@ -8,20 +8,24 @@ namespace DialogueSystem.Web;
 internal static class SessionPrincipal
 {
     private const string VersionClaim = "dialogue-session-version";
+    private const string ChangePasswordClaim = "dialogue-change-password";
 
     public static ClaimsPrincipal Create(AccountSession session) => new(new ClaimsIdentity(
         [
             new(ClaimTypes.NameIdentifier, session.Id.ToString(CultureInfo.InvariantCulture)),
             new(ClaimTypes.Name, session.Login),
             new(ClaimTypes.Role, session.Role),
-            new(VersionClaim, session.Version.ToString(CultureInfo.InvariantCulture))
+            new(VersionClaim, session.Version.ToString(CultureInfo.InvariantCulture)),
+            new(ChangePasswordClaim, session.MustChangePassword ? "true" : "false")
         ], CookieAuthenticationDefaults.AuthenticationScheme));
 
     public static int UserId(ClaimsPrincipal principal) =>
         int.Parse(principal.FindFirstValue(ClaimTypes.NameIdentifier)!, CultureInfo.InvariantCulture);
 
     public static AccountSummary Summary(ClaimsPrincipal principal) =>
-        new(UserId(principal), principal.Identity!.Name!, principal.FindFirstValue(ClaimTypes.Role)!);
+        new(UserId(principal), principal.Identity!.Name!, principal.FindFirstValue(ClaimTypes.Role)!, MustChangePassword(principal));
+
+    public static bool MustChangePassword(ClaimsPrincipal principal) => principal.FindFirstValue(ChangePasswordClaim) == "true";
 
     public static async Task ValidateAsync(CookieValidatePrincipalContext context)
     {
@@ -41,7 +45,7 @@ internal static class SessionPrincipal
             return;
         }
 
-        if (!principal.IsInRole(session.Role))
+        if (!principal.IsInRole(session.Role) || MustChangePassword(principal) != session.MustChangePassword)
         {
             context.ReplacePrincipal(Create(session));
             context.ShouldRenew = true;

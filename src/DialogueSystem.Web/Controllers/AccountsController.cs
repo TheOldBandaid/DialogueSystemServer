@@ -121,6 +121,26 @@ public sealed class AccountsController(AccountService accounts, LoginProtection 
         [Required, MaxLength(100)] string Login,
         [Required, MaxLength(512)] string Password);
 
+    [HttpPost("{id:int}/password")]
+    [Authorize(Roles = AccountRoles.Administrator)]
+    [ValidateAntiForgeryToken]
+    public async Task<IActionResult> ResetPassword(int id, ResetPasswordRequest request, CancellationToken ct) =>
+        await accounts.ResetPasswordAsync(SessionPrincipal.UserId(User), id,
+            request.CurrentPassword, request.TemporaryPassword, ct) switch
+        {
+            PasswordReset.Changed => NoContent(),
+            PasswordReset.NotFound => NotFound(),
+            PasswordReset.Forbidden => Forbid(),
+            PasswordReset.WrongPassword => BadRequest(new ProblemDetails { Detail = "Пароль администратора указан неверно." }),
+            PasswordReset.OwnAccount => BadRequest(new ProblemDetails { Detail = "Свой пароль изменяйте в разделе «Моя учётная запись»." }),
+            PasswordReset.StaleAccount => Conflict(new ProblemDetails { Detail = "Учётная запись уже изменилась. Обновите список." }),
+            _ => throw new InvalidOperationException()
+        };
+
+    public sealed record ResetPasswordRequest(
+        [Required, MaxLength(512)] string CurrentPassword,
+        [Required, StringLength(512, MinimumLength = 12)] string TemporaryPassword);
+
     public sealed record CreateAccountRequest(
         [Required, RegularExpression("[A-Za-z0-9][A-Za-z0-9._-]{2,99}")] string Login,
         [Required, StringLength(512, MinimumLength = 12)] string Password,
