@@ -101,8 +101,10 @@ public sealed class DatabaseBackupTests
         var manual = await backups.CreateAsync(BackupKind.Manual);
         for (var i = 0; i < 8; i++) await backups.CreateAsync(BackupKind.Daily);
         for (var i = 0; i < 4; i++) await backups.CreateAsync(BackupKind.Migration);
+        for (var i = 0; i < 4; i++) await backups.CreateAsync(BackupKind.Cleanup);
         Assert.Equal(7, Directory.GetFiles(root, "dialogues-daily-*.db").Length);
         Assert.Equal(3, Directory.GetFiles(root, "dialogues-migration-*.db").Length);
+        Assert.Equal(3, Directory.GetFiles(root, "dialogues-cleanup-*.db").Length);
         Assert.True(File.Exists(manual.Path));
         await DatabaseBackups.ValidateAsync(manual.Path);
         Assert.Empty(Directory.GetFiles(root, "*.partial*"));

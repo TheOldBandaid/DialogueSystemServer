@@ -20,11 +20,14 @@ public sealed class DialogueDbContext(DbContextOptions<DialogueDbContext> option
         modelBuilder.Entity<DialogueRevision>().HasOne<Dialogue>().WithMany()
             .HasForeignKey(revision => revision.DialogueId).OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<DialogueRevision>().HasIndex(revision => new { revision.DialogueId, revision.Id });
+        modelBuilder.Entity<DialogueRevision>().HasIndex(revision => new { revision.DialogueId, revision.Author, revision.Id });
         modelBuilder.Entity<Account>().HasIndex(account => account.Login).IsUnique();
         modelBuilder.Entity<Character>().HasIndex(character => character.Key).IsUnique();
         modelBuilder.Entity<Character>().HasIndex(character => new { character.OriginKey, character.Name });
         modelBuilder.Entity<DialoguePreview>()
-            .HasIndex(preview => new { preview.UserId, preview.DialogueId, preview.StartedAtUnixMilliseconds });
+            .HasIndex(preview => new { preview.UserId, preview.DialogueId, preview.StartedAtUnixMilliseconds, preview.Id });
+        modelBuilder.Entity<DialoguePreview>()
+            .HasIndex(preview => new { preview.DialogueId, preview.StartedAtUnixMilliseconds, preview.Id });
         modelBuilder.Entity<PreviewHistoryEntry>()
             .HasKey(entry => new { entry.PreviewId, entry.Step });
         modelBuilder.Entity<DialoguePreview>()

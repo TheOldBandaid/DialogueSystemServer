@@ -201,9 +201,9 @@ namespace DialogueSystem.Infrastructure.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("DialogueId");
+                    b.HasIndex("DialogueId", "StartedAtUnixMilliseconds", "Id");
 
-                    b.HasIndex("UserId", "DialogueId", "StartedAtUnixMilliseconds");
+                    b.HasIndex("UserId", "DialogueId", "StartedAtUnixMilliseconds", "Id");
 
                     b.ToTable("Previews");
                 });
@@ -241,6 +241,8 @@ namespace DialogueSystem.Infrastructure.Data.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("DialogueId", "Id");
+
+                    b.HasIndex("DialogueId", "Author", "Id");
 
                     b.ToTable("DialogueRevisions");
                 });

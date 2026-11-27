@@ -1,6 +1,7 @@
 import { api, byId, dialogueUrl, downloadJson, initializeWorkspace, run } from "./workspace.js";
 import { createDialogueMap } from "./dialogue-map.js";
 import { initializeRevisions } from "./dialogue-revisions.js";
+import { initializeCleanup } from "./dialogue-cleanup.js";
 import { createDraftGuard } from "./draft-guard.js";
 import { createPagedSelect } from "./paged-select.js";
 
@@ -31,6 +32,10 @@ const speakerPicker = createPagedSelect({
 });
 const dialogueMap = createDialogueMap(() => api(`${path()}/map`), selectLine);
 const refreshRevisions = initializeRevisions(path, () => drafts.confirmDiscard(), () => drafts.reset());
+const cleanup = initializeCleanup(path, async () => {
+  resetPreviewHistory();
+  await refreshRevisions();
+});
 const lineLabel = line => `№${line.id} · ${line.text}`;
 const shortLabel = line => {
   const label = lineLabel(line);
@@ -239,6 +244,7 @@ async function openEditor() {
   byId("show-map").hidden = true;
   state.dialogue = null;
   dialogueMap.reset();
+  cleanup.reset();
   byId("preview-step").replaceChildren();
   try {
     await loadDialogue(id, Number(query.get("line")));
