@@ -1,98 +1,5 @@
 import { byId, run } from "./workspace.js";
-
-const nodeWidth = 218;
-const nodeHeight = 86;
-const columnGap = 86;
-const rowGap = 38;
-const margin = 26;
-
-function layoutMap(snapshot) {
-  const nodes = new Map(snapshot.lines.map(line => [line.id, { line, incoming: [], outgoing: [] }]));
-  const edges = [];
-  const pairs = new Map();
-  for (const choice of snapshot.choices) {
-    const source = nodes.get(choice.sourceLineId);
-    const target = nodes.get(choice.targetLineId);
-    if (!source || !target) continue;
-
-    const edge = { choice, source, target, offset: 0 };
-    source.outgoing.push(edge);
-    target.incoming.push(edge);
-    edges.push(edge);
-
-    const key = `${choice.sourceLineId}/${choice.targetLineId}`;
-    const group = pairs.get(key) ?? [];
-    group.push(edge);
-    pairs.set(key, group);
-  }
-  for (const group of pairs.values()) {
-    const { source, target } = group[0];
-    const reciprocal = source !== target && pairs.has(`${target.line.id}/${source.line.id}`);
-    const laneOffset = reciprocal ? (source.line.id < target.line.id ? -7 : 7) : 0;
-    const spacing = Math.min(12, 34 / group.length);
-    group.forEach((edge, index) => { edge.offset = laneOffset + (index - (group.length - 1) / 2) * spacing; });
-  }
-  if (nodes.size === 0) return { nodes, edges, width: 0, height: 0 };
-
-  const root = nodes.get(snapshot.startLineId) ?? nodes.values().next().value;
-  const depths = new Map([[root, 0]]);
-  const queue = [root];
-  const columns = [];
-  for (let index = 0; index < queue.length; index++) {
-    const node = queue[index];
-    const depth = depths.get(node);
-    const column = columns[depth] ??= [];
-    column.push(node);
-    for (const { target } of node.outgoing) {
-      if (depths.has(target)) continue;
-      depths.set(target, depth + 1);
-      queue.push(target);
-    }
-  }
-
-  function place(node, column, row) {
-    node.x = margin + column * (nodeWidth + columnGap);
-    node.y = margin + row * (nodeHeight + rowGap);
-  }
-
-  let rows = 0;
-  columns.forEach((column, depth) => {
-    rows = Math.max(rows, column.length);
-    column.forEach((node, row) => place(node, depth, row));
-  });
-
-  const remaining = [...nodes.values()].filter(node => !depths.has(node));
-  const remainingColumns = Math.min(remaining.length, Math.max(2, Math.min(4, columns.length)));
-  remaining.forEach((node, index) => place(node, index % remainingColumns,
-    rows + 1 + Math.floor(index / remainingColumns)));
-  if (remainingColumns) rows += 1 + Math.ceil(remaining.length / remainingColumns);
-
-  const width = margin + Math.max(columns.length, remainingColumns) * (nodeWidth + columnGap);
-  const height = margin * 2 + rows * (nodeHeight + rowGap) - rowGap;
-  return { nodes, edges, width, height };
-}
-
-function edgePoints({ source, target, offset }) {
-  const right = source.x + nodeWidth;
-  const sourceY = source.y + nodeHeight / 2 + offset;
-  const targetY = target.y + nodeHeight / 2 + offset;
-
-  if (source === target) {
-    const bend = right + 35 + offset;
-    return [right, sourceY - 15, bend, sourceY - 22, bend, sourceY + 22, right, sourceY + 15];
-  }
-
-  if (source.x === target.x) {
-    const bend = right + 40 + offset;
-    return [right, sourceY, bend, sourceY, bend, targetY, right, targetY];
-  }
-
-  const direction = target.x > source.x ? 1 : -1;
-  const from = direction === 1 ? right : source.x;
-  const to = direction === 1 ? target.x : target.x + nodeWidth;
-  const bend = Math.min(100, Math.abs(to - from) * 0.55) * direction;
-  return [from, sourceY, from + bend, sourceY, to - bend, targetY, to, targetY];
-}
+import { nodeWidth, nodeHeight, layoutMap, edgePoints, createSpatialIndex, edgeBounds, nodeBounds } from "./dialogue-map-layout.js";
 
 function drawEdge(context, edge, selected) {
   const [x0, y0, x1, y1, x2, y2, x3, y3] = edge.points;
@@ -117,13 +24,6 @@ function drawEdge(context, edge, selected) {
   context.fill();
 }
 
-function visibleEdges(edges, left, top, width, height) {
-  const right = left + width;
-  const bottom = top + height;
-  return edges.filter(({ bounds }) =>
-    bounds.right >= left && bounds.left <= right && bounds.bottom >= top && bounds.top <= bottom);
-}
-
 export function createDialogueMap(loadSnapshot, chooseLine) {
   const panel = byId("map-panel");
   const content = byId("map-content");
@@ -137,13 +37,43 @@ export function createDialogueMap(loadSnapshot, chooseLine) {
   let graph;
   let selectedId;
   let frame;
+  let refreshGeneration = 0;
+  const rendered = new Map();
+  let baseStatus = "";
+
+  function syncNodes(left, top, width, height) {
+    const visible = new Set(graph.nodeIndex.query({ left: left - 320, top: top - 180,
+      right: left + width + 320, bottom: top + height + 180 }).map(node => node.line.id));
+    const focusedId = Number(document.activeElement?.dataset?.lineId);
+    if (graph.nodes.has(focusedId)) visible.add(focusedId);
+    for (const [id, button] of rendered) {
+      if (visible.has(id)) continue;
+      button.remove(); rendered.delete(id);
+      const node = graph.nodes.get(id);
+      if (node) node.button = undefined;
+    }
+    const added = document.createDocumentFragment();
+    for (const id of visible) {
+      if (rendered.has(id)) continue;
+      const node = graph.nodes.get(id);
+      node.button = makeNode(node, graph.startLineId);
+      rendered.set(id, node.button);
+      added.append(node.button);
+    }
+    surface.append(added);
+  }
 
   function redraw() {
     frame = undefined;
-    if (!graph || !panel.open || !context) return;
+    if (!graph || !panel.open) return;
 
     const width = viewport.clientWidth;
     const height = viewport.clientHeight;
+    if (width === 0 || height === 0) return;
+    const left = viewport.scrollLeft;
+    const top = viewport.scrollTop;
+    syncNodes(left, top, width, height);
+    if (!context) return;
     const ratio = window.devicePixelRatio || 1;
     const pixelsWide = Math.round(width * ratio);
     const pixelsHigh = Math.round(height * ratio);
@@ -155,13 +85,21 @@ export function createDialogueMap(loadSnapshot, chooseLine) {
     }
     context.setTransform(ratio, 0, 0, ratio, 0, 0);
     context.clearRect(0, 0, width, height);
-    const left = viewport.scrollLeft;
-    const top = viewport.scrollTop;
     context.translate(-left, -top);
 
     const selected = graph.nodes.get(selectedId);
     const active = [];
-    for (const edge of visibleEdges(graph.edges, left, top, width, height)) {
+    let visible = graph.edgeIndex.query({ left, top, right: left + width, bottom: top + height });
+    const dense = visible.length > 1000;
+    if (dense) {
+      const local = visible.filter(edge => rendered.has(edge.source.line.id) && rendered.has(edge.target.line.id));
+      const adjacent = local.filter(edge => edge.source === selected || edge.target === selected).slice(0, 1000);
+      const rest = local.filter(edge => edge.source !== selected && edge.target !== selected).slice(0, 1000 - adjacent.length);
+      visible = [...adjacent, ...rest];
+    }
+    status.textContent = dense ? "Связей много: показана часть стрелок. Все переходы доступны в списках выбранной реплики." : baseStatus;
+    status.hidden = !status.textContent;
+    for (const edge of visible) {
       if (edge.source === selected || edge.target === selected) active.push(edge);
       else drawEdge(context, edge, false);
     }
@@ -183,45 +121,56 @@ export function createDialogueMap(loadSnapshot, chooseLine) {
   }
 
   function renderTransitions(host, edges, incoming) {
-    const rows = edges.map(({ choice, source, target }) => {
-      const neighbor = (incoming ? source : target).line;
-      const link = document.createElement("button");
-      link.type = "button";
-      link.textContent = incoming ? `№${neighbor.id} → ${choice.text}` : `${choice.text} → №${neighbor.id}`;
-      link.onclick = run(async () => {
-        await chooseLine(neighbor.id);
-        centerSelected();
-      });
-      const item = document.createElement("li");
-      item.append(link);
+    function renderPage(limit) {
+      const rows = edges.slice(0, limit).map(({ choice, source, target }) => {
+        const neighbor = (incoming ? source : target).line;
+        const link = document.createElement("button");
+        link.type = "button";
+        link.textContent = incoming ? `№${neighbor.id} → ${choice.text}` : `${choice.text} → №${neighbor.id}`;
+        link.onclick = run(async () => {
+          await chooseLine(neighbor.id);
+          centerSelected();
+        });
+        const item = document.createElement("li");
+        item.append(link);
 
-      const details = [];
-      if (choice.requiredState) details.push(`Доступен при «${choice.requiredState}»`);
-      if (choice.nextState) details.push(`Новое состояние «${choice.nextState}»`);
-      if (details.length) {
-        const note = document.createElement("small");
-        note.className = "map-condition";
-        note.textContent = details.join(" · ");
-        item.append(note);
+        const details = [];
+        if (choice.requiredState) details.push(`Доступен при «${choice.requiredState}»`);
+        if (choice.nextState) details.push(`Новое состояние «${choice.nextState}»`);
+        if (details.length) {
+          const note = document.createElement("small");
+          note.className = "map-condition";
+          note.textContent = details.join(" · ");
+          item.append(note);
+        }
+        return item;
+      });
+      if (rows.length === 0) {
+        const empty = document.createElement("li");
+        empty.textContent = "Нет переходов.";
+        rows.push(empty);
       }
-      return item;
-    });
-    if (rows.length === 0) {
-      const empty = document.createElement("li");
-      empty.textContent = "Нет переходов.";
-      rows.push(empty);
+      host.replaceChildren(...rows);
+      if (edges.length > limit) {
+        const row = document.createElement("li");
+        const more = document.createElement("button");
+        more.type = "button";
+        more.textContent = `Показать ещё ${incoming ? "входящие" : "исходящие"} переходы`;
+        more.onclick = run(() => renderPage(limit + 20));
+        row.append(more); host.append(row);
+      }
     }
-    host.replaceChildren(...rows);
+    renderPage(20);
   }
 
   function select(id) {
-    graph?.nodes.get(selectedId)?.button.setAttribute("aria-pressed", "false");
+    graph?.nodes.get(selectedId)?.button?.setAttribute("aria-pressed", "false");
     selectedId = id;
     const node = graph?.nodes.get(id);
     selection.hidden = !node;
     center.disabled = !node;
     if (node) {
-      node.button.setAttribute("aria-pressed", "true");
+      node.button?.setAttribute("aria-pressed", "true");
       byId("map-selected-title").textContent = `Реплика №${id} · ${node.line.speaker}`;
       renderTransitions(byId("map-incoming"), node.incoming, true);
       renderTransitions(byId("map-outgoing"), node.outgoing, false);
@@ -235,7 +184,7 @@ export function createDialogueMap(loadSnapshot, chooseLine) {
     button.type = "button";
     button.className = "map-node";
     button.dataset.lineId = line.id;
-    button.setAttribute("aria-pressed", "false");
+    button.setAttribute("aria-pressed", String(line.id === selectedId));
     button.style.cssText = `left:${x}px;top:${y}px;width:${nodeWidth}px;height:${nodeHeight}px`;
     button.title = line.text;
     button.onclick = run(() => chooseLine(line.id));
@@ -259,34 +208,55 @@ export function createDialogueMap(loadSnapshot, chooseLine) {
 
   async function refresh(centerOnOpen = false) {
     if (!panel.open) return;
-
-    const snapshot = await loadSnapshot();
+    const request = ++refreshGeneration;
+    let snapshot;
+    try { snapshot = await loadSnapshot(); }
+    catch (error) {
+      if (request !== refreshGeneration) return;
+      reset();
+      status.textContent = error.message;
+      status.hidden = false;
+      throw error;
+    }
+    if (request !== refreshGeneration) return;
+    if (graph && snapshot.revision != null && graph.revision === snapshot.revision && graph.id === snapshot.id) {
+      select(selectedId);
+      if (centerOnOpen) centerSelected();
+      return;
+    }
     graph = layoutMap(snapshot);
+    graph.id = snapshot.id;
+    graph.revision = snapshot.revision;
+    graph.startLineId = snapshot.startLineId;
     for (const edge of graph.edges) {
       edge.points = edgePoints(edge);
-      const [x0, y0, x1, y1, x2, y2, x3, y3] = edge.points;
-      edge.bounds = {
-        left: Math.min(x0, x1, x2, x3) - 10,
-        right: Math.max(x0, x1, x2, x3) + 10,
-        top: Math.min(y0, y1, y2, y3) - 10,
-        bottom: Math.max(y0, y1, y2, y3) + 10
-      };
+      edge.bounds = edgeBounds(edge.points);
     }
+    graph.nodeIndex = createSpatialIndex(graph.nodes.values(), nodeBounds);
+    graph.edgeIndex = createSpatialIndex(graph.edges, edge => edge.bounds);
 
     const empty = graph.nodes.size === 0;
-    status.textContent = empty ? "Добавьте реплики, чтобы увидеть карту." :
+    baseStatus = empty ? "Добавьте реплики, чтобы увидеть карту." :
       snapshot.startLineId == null ? "Стартовая реплика не задана." : "";
+    status.textContent = baseStatus;
     status.hidden = !status.textContent;
     content.hidden = empty;
     surface.style.width = `${graph.width}px`;
     surface.style.height = `${graph.height}px`;
-    const buttons = [...graph.nodes.values()].map(node => {
-      node.button = makeNode(node, snapshot.startLineId);
-      return node.button;
-    });
-    surface.replaceChildren(...buttons);
+    surface.replaceChildren();
+    rendered.clear();
     select(selectedId);
     if (centerOnOpen) centerSelected();
+  }
+
+  function reset() {
+    refreshGeneration++;
+    graph = undefined;
+    rendered.clear();
+    surface.replaceChildren();
+    content.hidden = true;
+    selection.hidden = true;
+    center.disabled = true;
   }
 
   panel.ontoggle = () => {
@@ -296,5 +266,5 @@ export function createDialogueMap(loadSnapshot, chooseLine) {
   center.addEventListener("click", centerSelected);
   viewport.addEventListener("scroll", scheduleDraw, { passive: true });
   new ResizeObserver(scheduleDraw).observe(viewport);
-  return { refresh, select };
+  return { refresh, select, reset };
 }

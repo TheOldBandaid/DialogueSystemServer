@@ -24,7 +24,7 @@ function setOptions(select, records, label, current) {
 const path = () => `/api/dialogues/${state.dialogue.id}`;
 const linePath = () => `${path()}/lines/${state.line.id}`;
 const characterLabel = character => `${character.name} · №${character.id}`;
-const dialogueMap = createDialogueMap(() => api(`${path()}/export`), selectLine);
+const dialogueMap = createDialogueMap(() => api(`${path()}/map`), selectLine);
 const refreshRevisions = initializeRevisions(path, () => drafts.confirmDiscard(), () => drafts.reset());
 const lineLabel = line => `№${line.id} · ${line.text}`;
 const shortLabel = line => {
