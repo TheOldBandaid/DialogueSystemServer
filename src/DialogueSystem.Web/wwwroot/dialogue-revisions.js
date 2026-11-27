@@ -1,6 +1,6 @@
 import { api, byId, dialogueUrl, downloadJson, run } from "./workspace.js";
 
-export function initializeRevisions(path) {
+export function initializeRevisions(path, beforeCopy = () => true, copied = () => {}) {
   const panel = byId("revision-panel");
   const form = byId("save-revision");
   const list = byId("revision-list");
@@ -27,7 +27,11 @@ export function initializeRevisions(path) {
     restore.type = "button";
     restore.textContent = "Открыть как копию";
     restore.onclick = run(async () => {
-      const copy = await api(`${path()}/revisions/${version.id}/copy`, "POST");
+      if (!beforeCopy()) return;
+      const copy = await api(`${path()}/revisions/${version.id}/copy`, "POST", {
+        cloneCharacters: byId("revision-copy-characters").checked
+      });
+      copied();
       location.assign(dialogueUrl(copy.id));
     });
     actions.append(exportButton, restore);

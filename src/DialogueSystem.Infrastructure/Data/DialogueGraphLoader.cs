@@ -1,5 +1,4 @@
 using DialogueSystem.Application;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
 namespace DialogueSystem.Infrastructure.Data;
@@ -12,17 +11,8 @@ internal static class DialogueGraphLoader
         if (db.Database.CurrentTransaction is not null)
             return await LoadSnapshotAsync(db, cache, dialogueId, cancellationToken, publish: false);
 
-        await db.Database.OpenConnectionAsync(cancellationToken);
-        try
-        {
-            await using var transaction = ((SqliteConnection)db.Database.GetDbConnection()).BeginTransaction(deferred: true);
-            await using var wrapper = await db.Database.UseTransactionAsync(transaction, cancellationToken);
-            return await LoadSnapshotAsync(db, cache, dialogueId, cancellationToken, publish: true);
-        }
-        finally
-        {
-            await db.Database.CloseConnectionAsync();
-        }
+        return await SqliteReadSnapshot.ReadAsync(db,
+            () => LoadSnapshotAsync(db, cache, dialogueId, cancellationToken, publish: true), cancellationToken);
     }
 
     private static async Task<DialogueGraph?> LoadSnapshotAsync(

@@ -63,10 +63,15 @@ namespace DialogueSystem.Infrastructure.Data.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
+                    b.Property<string>("OriginKey")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
                     b.HasIndex("Key")
                         .IsUnique();
+
+                    b.HasIndex("OriginKey", "Name");
 
                     b.ToTable("Characters");
                 });

@@ -3,6 +3,7 @@ param(
     [Parameter(Mandatory)]
     [ValidateSet('AccountsStatus', 'ResetAdminPassword', 'Backup', 'Restore')]
     [string] $Action,
+    [ValidateNotNullOrEmpty()]
     [string] $DataDirectory = (Join-Path $PSScriptRoot 'artifacts/demo-data'),
     [string] $Login,
     [string] $File

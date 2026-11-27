@@ -13,6 +13,7 @@ public interface IDialogueCatalog
     Task<bool> SetMinimumLevelAsync(int id, int? minimum, CancellationToken ct);
     Task<DialogueDocument?> ExportAsync(int id, CancellationToken ct);
     Task<DialogueSummary> ImportAsync(DialogueDocument document, CancellationToken ct);
+    Task<DialogueSummary?> CopyAsync(int id, bool cloneCharacters, CancellationToken ct);
     Task<LineContext?> ContextAsync(int id, int lineId, CancellationToken ct);
     Task<IReadOnlyList<LineSummary>?> BranchesAsync(int id, CancellationToken ct);
     Task<DialogueValidation?> ValidateAsync(int id, CancellationToken ct);
@@ -40,3 +41,4 @@ public enum ReassignmentStatus { Reassigned, SameCharacter, SourceNotFound, Targ
 public sealed record CharacterReassignment(ReassignmentStatus Status, int UpdatedLineCount = 0);
 
 public sealed record ReassignedLines(int UpdatedLineCount);
+public sealed record DialogueCopyInput(bool CloneCharacters = false);

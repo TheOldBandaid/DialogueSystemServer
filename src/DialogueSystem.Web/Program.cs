@@ -40,7 +40,8 @@ builder.Services.AddRateLimiter(options =>
 });
 
 await using var app = builder.Build();
-app.Services.GetRequiredService<DataDirectoryLease>();
+var dataLease = app.Services.GetRequiredService<DataDirectoryLease>();
+app.Lifetime.ApplicationStopped.Register(dataLease.Dispose);
 await using (var scope = app.Services.CreateAsyncScope())
 {
     var maintenance = app.Configuration["maintenance"];

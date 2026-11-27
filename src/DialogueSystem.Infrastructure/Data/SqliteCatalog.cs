@@ -67,6 +67,15 @@ internal sealed class SqliteDialogueCatalog(DialogueDbContext db, GraphSnapshots
     public Task<DialogueSummary> ImportAsync(DialogueDocument document, CancellationToken ct) =>
         DialogueImporter.SaveAsync(db, document, ct);
 
+    public async Task<DialogueSummary?> CopyAsync(int id, bool cloneCharacters, CancellationToken ct)
+    {
+        var document = await ExportAsync(id, ct);
+        if (document is null) return null;
+        var suffix = " (копия)";
+        var title = document.Title.Length + suffix.Length <= 160 ? document.Title + suffix : "Копия диалога";
+        return await DialogueImporter.SaveAsync(db, document with { Title = title }, ct, cloneCharacters);
+    }
+
     public async Task<LineContext?> ContextAsync(int id, int lineId, CancellationToken ct)
     {
         var neighbors =
@@ -149,9 +158,11 @@ internal sealed class SqliteCharacterCatalog(DialogueDbContext db) : ICharacterC
         return updated != 0;
     }
 
-    public async Task<CharacterUsage?> UsageAsync(int id, CancellationToken ct)
+    public Task<CharacterUsage?> UsageAsync(int id, CancellationToken ct) =>
+        SqliteReadSnapshot.ReadAsync(db, () => ReadUsageAsync(id, ct), ct);
+
+    private async Task<CharacterUsage?> ReadUsageAsync(int id, CancellationToken ct)
     {
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
         var character = await FindAsync(id, ct);
         if (character is null)
             return null;

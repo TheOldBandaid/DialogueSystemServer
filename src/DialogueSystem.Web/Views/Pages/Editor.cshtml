@@ -70,14 +70,17 @@
         <button>Сохранить версию</button>
       </form>
       <p id="revision-empty" hidden>Сохранённых версий пока нет.</p>
+      <label><input type="checkbox" id="revision-copy-characters"> Создавать отдельных персонажей при открытии версии как копии</label>
       <ul id="revision-list" class="revision-list"></ul>
       <button type="button" id="revision-more" hidden>Показать более ранние версии</button>
     </details>
     <div class="actions dialogue-actions">
+      <label><input type="checkbox" id="copy-characters"> Создать отдельных персонажей для копии</label>
       <button type="button" id="copy-dialogue">Копировать диалог</button>
       <button type="button" id="export-dialogue">Скачать JSON</button>
       <button type="button" id="validate-dialogue" aria-controls="validation-report">Проверить диалог</button>
     </div>
+    <p>Без отдельных персонажей копии используют общий справочник: переименование персонажа меняет имя во всех его живых репликах.</p>
     <form id="minimum-level" class="actions dialogue-actions">
       <label>Минимальный уровень игрока
         <input name="minimumPlayerLevel" type="number" min="1" max="2147483647" step="1" placeholder="Без ограничения">

@@ -3,6 +3,7 @@ using System.Text.Json.Serialization;
 using DialogueSystem.Application;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 
 namespace DialogueSystem.Web.Controllers;
 
@@ -65,6 +66,14 @@ public sealed class DialoguesController(IDialogueCatalog catalog) : ControllerBa
     {
         var context = await catalog.ContextAsync(id, lineId, cancellationToken);
         return context is null ? NotFound() : Ok(context);
+    }
+
+    [HttpPost("{id:int}/copy")]
+    public async Task<ActionResult<DialogueSummary>> Copy(int id,
+        [FromBody(EmptyBodyBehavior = EmptyBodyBehavior.Allow)] DialogueCopyInput? input, CancellationToken ct)
+    {
+        var copy = await catalog.CopyAsync(id, input?.CloneCharacters ?? false, ct);
+        return copy is null ? NotFound() : CreatedAtAction(nameof(Get), new { id = copy.Id }, copy);
     }
 
     [HttpGet("{id:int}/story-branches")]

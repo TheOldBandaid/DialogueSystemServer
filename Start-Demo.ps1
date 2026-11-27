@@ -2,7 +2,9 @@
 param(
     [ValidateRange(1, 65535)]
     [int] $Port = 5189,
-    [switch] $InitializeAccounts
+    [switch] $InitializeAccounts,
+    [ValidateNotNullOrEmpty()]
+    [string] $DataDirectory = (Join-Path $PSScriptRoot 'artifacts/demo-data')
 )
 
 $ErrorActionPreference = 'Stop'
@@ -24,7 +26,7 @@ function Read-DemoPassword([string] $Login) {
 
 Get-Command dotnet -ErrorAction Stop | Out-Null
 $project = Join-Path $PSScriptRoot 'src/DialogueSystem.Web'
-$dataDirectory = Join-Path $PSScriptRoot 'artifacts/demo-data'
+$DataDirectory = [System.IO.Path]::GetFullPath($DataDirectory)
 $address = "http://127.0.0.1:$Port"
 
 $previousAdminPassword = $env:DialogueSystem__AdminPassword

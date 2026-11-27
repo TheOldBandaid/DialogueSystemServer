@@ -105,7 +105,9 @@ public sealed class DatabaseBackupTests
         Assert.Equal(3, Directory.GetFiles(root, "dialogues-migration-*.db").Length);
         Assert.True(File.Exists(manual.Path));
         await DatabaseBackups.ValidateAsync(manual.Path);
-        Assert.Empty(Directory.GetFiles(root, "*.partial"));
+        Assert.Empty(Directory.GetFiles(root, "*.partial*"));
+        Assert.Empty(Directory.GetFiles(root, "*.db-wal"));
+        Assert.Empty(Directory.GetFiles(root, "*.db-shm"));
     }
 
     private sealed record Csrf(string Token);

@@ -51,7 +51,7 @@ public sealed class DatabaseBackups(string directory, TimeProvider? clock = null
             Prune(BackupKind.Migration, 3);
             return new(path, kind, new FileInfo(path).Length);
         }
-        finally { if (File.Exists(staging)) File.Delete(staging); }
+        finally { DeleteFileSet(staging); }
     }
 
     public static async Task ValidateAsync(string path, bool requireApplication = true, CancellationToken ct = default)
@@ -96,13 +96,13 @@ public sealed class DatabaseBackups(string directory, TimeProvider? clock = null
                     File.Copy(DatabasePath + suffix, System.IO.Path.Combine(preserved.FullName, "dialogues.db" + suffix));
             // A restored SessionVersion might equal an old cookie's version: invalidate through a marker outside the DB.
             SessionEpoch.Rotate(dataDirectory);
-            await CopyDatabaseAsync(staging, DatabasePath, ct);
+            await CopyDatabaseAsync(staging, DatabasePath, ct, standalone: false);
             return new(preserved.FullName);
         }
         finally
         {
-            if (File.Exists(staging)) File.Delete(staging);
-            gate.Release();
+            try { DeleteFileSet(staging); }
+            finally { gate.Release(); }
         }
     }
 
@@ -113,7 +113,13 @@ public sealed class DatabaseBackups(string directory, TimeProvider? clock = null
             .Where(path => System.Text.RegularExpressions.Regex.IsMatch(System.IO.Path.GetFileName(path),
                 $"\\A{prefix}[0-9]{{8}}-[0-9]{{6}}-[a-f0-9]{{32}}\\.db\\z"))
             .OrderByDescending(File.GetLastWriteTimeUtc).ThenByDescending(path => path).Skip(keep);
-        foreach (var path in candidates) File.Delete(path);
+        foreach (var path in candidates) DeleteFileSet(path);
+    }
+
+    private static void DeleteFileSet(string path)
+    {
+        foreach (var suffix in new[] { "", "-wal", "-shm", "-journal" })
+            if (File.Exists(path + suffix)) File.Delete(path + suffix);
     }
 
     private static SqliteConnection ReadConnection(string path) => new(new SqliteConnectionStringBuilder
@@ -121,7 +127,7 @@ public sealed class DatabaseBackups(string directory, TimeProvider? clock = null
         DataSource = path, Mode = SqliteOpenMode.ReadOnly, Pooling = false
     }.ToString());
 
-    private static async Task CopyDatabaseAsync(string source, string destination, CancellationToken ct)
+    private static async Task CopyDatabaseAsync(string source, string destination, CancellationToken ct, bool standalone = true)
     {
         await using var input = ReadConnection(source);
         await input.OpenAsync(ct);
@@ -132,6 +138,10 @@ public sealed class DatabaseBackups(string directory, TimeProvider? clock = null
         await output.OpenAsync(ct);
         ct.ThrowIfCancellationRequested();
         input.BackupDatabase(output);
+        // Publish portable backups as a single file; preserve WAL for the working database.
+        using var journal = output.CreateCommand();
+        journal.CommandText = standalone ? "PRAGMA journal_mode=DELETE;" : "PRAGMA journal_mode=WAL;";
+        await journal.ExecuteScalarAsync(ct);
         ct.ThrowIfCancellationRequested();
     }
 

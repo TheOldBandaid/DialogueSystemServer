@@ -29,7 +29,6 @@ internal sealed class SqliteRevisions(DialogueDbContext db, GraphSnapshots cache
 
     public async Task<DialogueRevisionSummary?> CreateAsync(int dialogueId, string label, string author, CancellationToken ct)
     {
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
         var graph = await DialogueGraphLoader.LoadAsync(db, cache, dialogueId, ct);
         if (graph is null)
             return null;
@@ -45,6 +44,12 @@ internal sealed class SqliteRevisions(DialogueDbContext db, GraphSnapshots cache
             ChoiceCount = document.Choices.Count,
             DocumentJson = JsonSerializer.Serialize(document, JsonSerializerOptions.Web)
         };
+        ct.ThrowIfCancellationRequested();
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        var current = await db.Dialogues.Where(dialogue => dialogue.Id == dialogueId)
+            .Select(dialogue => (long?)dialogue.Revision).SingleOrDefaultAsync(ct);
+        if (current is null) return null;
+        if (current != graph.Revision) throw new DialogueSnapshotConflictException();
         db.DialogueRevisions.Add(revision);
         await db.SaveChangesAsync(ct);
         await transaction.CommitAsync(ct);
@@ -58,7 +63,7 @@ internal sealed class SqliteRevisions(DialogueDbContext db, GraphSnapshots cache
         return revision is null ? null : ReadDocument(revision);
     }
 
-    public async Task<DialogueSummary?> CopyAsync(int dialogueId, int revisionId, CancellationToken ct)
+    public async Task<DialogueSummary?> CopyAsync(int dialogueId, int revisionId, CancellationToken ct, bool cloneCharacters = false)
     {
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
         var revision = await FindAsync(dialogueId, revisionId, ct);
@@ -68,7 +73,7 @@ internal sealed class SqliteRevisions(DialogueDbContext db, GraphSnapshots cache
         var document = ReadDocument(revision);
         var suffix = $" (версия «{revision.Label}»)";
         var title = document.Title.Length + suffix.Length <= 160 ? document.Title + suffix : revision.Label;
-        var copy = await DialogueImporter.SaveWithinTransactionAsync(db, document with { Title = title }, ct);
+        var copy = await DialogueImporter.SaveWithinTransactionAsync(db, document with { Title = title }, ct, cloneCharacters);
         await transaction.CommitAsync(ct);
         return copy;
     }

@@ -4,6 +4,7 @@ public sealed class Character
 {
     public int Id { get; set; }
     public string Key { get; set; } = Guid.NewGuid().ToString("N");
+    public string? OriginKey { get; set; }
     public required string Name { get; set; }
 }
 

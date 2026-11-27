@@ -23,8 +23,9 @@ function setOptions(select, records, label, current) {
 
 const path = () => `/api/dialogues/${state.dialogue.id}`;
 const linePath = () => `${path()}/lines/${state.line.id}`;
+const characterLabel = character => `${character.name} · №${character.id}`;
 const dialogueMap = createDialogueMap(() => api(`${path()}/export`), selectLine);
-const refreshRevisions = initializeRevisions(path);
+const refreshRevisions = initializeRevisions(path, () => drafts.confirmDiscard(), () => drafts.reset());
 const lineLabel = line => `№${line.id} · ${line.text}`;
 const shortLabel = line => {
   const label = lineLabel(line);
@@ -86,7 +87,7 @@ async function selectLine(id, discardConfirmed = false) {
   if (url.href !== location.href) history.replaceState(null, "", url);
   const isStart = line != null && line.id === state.dialogue.startLineId;
   byId("line-heading").textContent = line ? `Реплика №${line.id}${isStart ? " · старт" : ""}` : "Новая реплика";
-  setOptions(lineForm.elements.speakerId, state.characters, character => character.name, line?.speakerId);
+  setOptions(lineForm.elements.speakerId, state.characters, characterLabel, line?.speakerId);
   lineForm.elements.text.value = line?.text ?? "";
   lineForm.elements.isEnding.checked = line?.isEnding ?? false;
   lineForm.elements.isStoryBranch.checked = line?.isStoryBranch ?? false;
@@ -369,10 +370,7 @@ byId("delete-dialogue").onclick = run(async () => {
 });
 byId("copy-dialogue").onclick = run(async () => {
   if (!drafts.confirmDiscard()) return;
-  const data = await api(`${path()}/export`);
-  const suffix = " (копия)";
-  const title = data.title.length <= 160 - suffix.length ? data.title + suffix : "Копия диалога";
-  const created = await api("/api/dialogues/import", "POST", { ...data, title });
+  const created = await api(`${path()}/copy`, "POST", { cloneCharacters: byId("copy-characters").checked });
   drafts.reset();
   location.assign(dialogueUrl(created.id));
 });
@@ -386,7 +384,7 @@ byId("new-character").onsubmit = run(async event => {
   const character = await api("/api/characters", "POST", Object.fromEntries(new FormData(form)));
   form.reset();
   state.characters = await api("/api/characters");
-  setOptions(lineForm.elements.speakerId, state.characters, item => item.name, character.id);
+  setOptions(lineForm.elements.speakerId, state.characters, characterLabel, character.id);
   byId("status").textContent = `Персонаж «${character.name}» добавлен.`;
 });
 byId("new-line").onclick = run(() => selectLine(null));
