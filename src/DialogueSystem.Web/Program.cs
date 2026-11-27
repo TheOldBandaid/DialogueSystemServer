@@ -31,6 +31,7 @@ builder.Services.AddProblemDetails();
 builder.Services.AddHttpsRedirection(options => options.HttpsPort =
     builder.Configuration.GetValue<int?>("HTTPS_PORT") ?? 443);
 builder.Services.AddSingleton<LoginProtection>();
+builder.Services.AddHostedService<BackupWorker>();
 builder.Services.AddRateLimiter(options =>
 {
     options.AddPolicy(LoginProtection.Policy, context => RateLimitPartition.GetSlidingWindowLimiter(
@@ -43,6 +44,11 @@ app.Services.GetRequiredService<DataDirectoryLease>();
 await using (var scope = app.Services.CreateAsyncScope())
 {
     var maintenance = app.Configuration["maintenance"];
+    if (maintenance is "backup" or "restore")
+    {
+        Environment.ExitCode = await MaintenanceCommands.RunAsync(maintenance, scope.ServiceProvider, app.Configuration);
+        return;
+    }
     await scope.ServiceProvider.InitializeDialogueDatabaseAsync(maintenance is null && app.Environment.IsDevelopment() &&
         app.Configuration.GetValue("DialogueSystem:SeedDemo", true));
 
@@ -57,6 +63,8 @@ await using (var scope = app.Services.CreateAsyncScope())
         await accounts.EnsureAsync("admin", adminPassword, AccountRoles.Administrator, CancellationToken.None);
     if (app.Configuration["DialogueSystem:EditorPassword"] is { Length: > 0 } editorPassword)
         await accounts.EnsureAsync("editor", editorPassword, AccountRoles.Editor, CancellationToken.None);
+    if (app.Configuration.GetValue("DialogueSystem:Backups:Enabled", true))
+        await scope.ServiceProvider.GetRequiredService<DatabaseBackups>().EnsureDailyAsync();
 }
 
 if (!app.Environment.IsDevelopment())

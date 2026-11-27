@@ -1,5 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using DialogueSystem.Application;
+using DialogueSystem.Infrastructure;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
@@ -34,7 +35,7 @@ public sealed class AccountsController(AccountService accounts, LoginProtection 
         if (session is null)
             return Unauthorized();
 
-        await HttpContext.SignInAsync(SessionPrincipal.Create(session));
+        await HttpContext.SignInAsync(SessionPrincipal.Create(session, HttpContext.RequestServices.GetRequiredService<SessionEpoch>()));
         return Ok(session.Summary);
     }
 
@@ -93,6 +94,7 @@ public sealed class AccountsController(AccountService accounts, LoginProtection 
         };
 
     [HttpPut("me/password")]
+    [EnableRateLimiting(LoginProtection.Policy)]
     [Authorize]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> ChangePassword(PasswordRequest request, CancellationToken cancellationToken)
@@ -122,6 +124,7 @@ public sealed class AccountsController(AccountService accounts, LoginProtection 
         [Required, MaxLength(512)] string Password);
 
     [HttpPost("{id:int}/password")]
+    [EnableRateLimiting(LoginProtection.Policy)]
     [Authorize(Roles = AccountRoles.Administrator)]
     [ValidateAntiForgeryToken]
     public async Task<IActionResult> ResetPassword(int id, ResetPasswordRequest request, CancellationToken ct) =>

@@ -7,6 +7,7 @@ const passwordForm = byId("change-password");
 const roleLabels = { Editor: "Редактор", Administrator: "Администратор" };
 let token = "";
 let pendingOperations = 0;
+let signedInId;
 
 export async function api(path, method = "GET", body) {
   const response = await fetch(path, {
@@ -64,6 +65,7 @@ function showLogin() {
 }
 
 function showAccountManagement(profile) {
+  signedInId = profile?.id;
   accountAdmin.hidden = profile?.role !== "Administrator";
   if (accountAdmin.hidden) {
     accountAdmin.open = false;
@@ -134,7 +136,7 @@ function accountRow(account) {
     byId("status").textContent = `Пользователю «${account.login}» нужно войти с временным паролем и сменить его.`;
   });
   reset.append(current, temporary, submit);
-  row.append(reset);
+  if (account.id !== signedInId) row.append(reset);
   return row;
 }
 

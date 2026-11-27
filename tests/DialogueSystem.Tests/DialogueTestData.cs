@@ -35,6 +35,7 @@ internal sealed class DialogueTestData : IDisposable
         {
             builder.UseEnvironment(environment);
             builder.ConfigureHostConfiguration(configuration => configuration
+                .AddInMemoryCollection([new("DialogueSystem:Backups:Enabled", "false")])
                 .AddInMemoryCollection(settings)
                 .AddInMemoryCollection([new("DialogueSystem:DataDirectory", dataDirectory)]));
             return base.CreateHost(builder);

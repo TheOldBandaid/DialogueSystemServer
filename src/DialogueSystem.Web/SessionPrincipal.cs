@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Security.Claims;
 using DialogueSystem.Application;
+using DialogueSystem.Infrastructure;
 using Microsoft.AspNetCore.Authentication.Cookies;
 
 namespace DialogueSystem.Web;
@@ -9,14 +10,16 @@ internal static class SessionPrincipal
 {
     private const string VersionClaim = "dialogue-session-version";
     private const string ChangePasswordClaim = "dialogue-change-password";
+    private const string EpochClaim = "dialogue-session-epoch";
 
-    public static ClaimsPrincipal Create(AccountSession session) => new(new ClaimsIdentity(
+    public static ClaimsPrincipal Create(AccountSession session, SessionEpoch epoch) => new(new ClaimsIdentity(
         [
             new(ClaimTypes.NameIdentifier, session.Id.ToString(CultureInfo.InvariantCulture)),
             new(ClaimTypes.Name, session.Login),
             new(ClaimTypes.Role, session.Role),
             new(VersionClaim, session.Version.ToString(CultureInfo.InvariantCulture)),
-            new(ChangePasswordClaim, session.MustChangePassword ? "true" : "false")
+            new(ChangePasswordClaim, session.MustChangePassword ? "true" : "false"),
+            new(EpochClaim, epoch.Value)
         ], CookieAuthenticationDefaults.AuthenticationScheme));
 
     public static int UserId(ClaimsPrincipal principal) =>
@@ -37,9 +40,11 @@ internal static class SessionPrincipal
         }
 
         var accounts = context.HttpContext.RequestServices.GetRequiredService<AccountService>();
+        var epoch = context.HttpContext.RequestServices.GetRequiredService<SessionEpoch>();
         var session = await accounts.GetSessionAsync(id, context.HttpContext.RequestAborted);
         var version = principal.FindFirstValue(VersionClaim) ?? "0";
-        if (session is null || version != session.Version.ToString(CultureInfo.InvariantCulture))
+        if (session is null || version != session.Version.ToString(CultureInfo.InvariantCulture) ||
+            principal.FindFirstValue(EpochClaim) != epoch.Value)
         {
             context.RejectPrincipal();
             return;
@@ -47,7 +52,7 @@ internal static class SessionPrincipal
 
         if (!principal.IsInRole(session.Role) || MustChangePassword(principal) != session.MustChangePassword)
         {
-            context.ReplacePrincipal(Create(session));
+            context.ReplacePrincipal(Create(session, epoch));
             context.ShouldRenew = true;
         }
     }
