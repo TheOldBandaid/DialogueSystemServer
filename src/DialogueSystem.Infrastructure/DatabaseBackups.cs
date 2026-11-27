@@ -1,4 +1,6 @@
 using DialogueSystem.Infrastructure.Data;
+using System.Globalization;
+using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
@@ -64,27 +66,29 @@ public sealed class DatabaseBackups(string directory, TimeProvider? clock = null
         check.CommandText = "PRAGMA integrity_check;";
         if (!string.Equals(await check.ExecuteScalarAsync(ct) as string, "ok", StringComparison.Ordinal))
             throw new InvalidDataException("Резервная копия не прошла проверку целостности SQLite.");
+        if (requireApplication)
+        {
+            check.CommandText = "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name IN ('Dialogues','Characters','Lines','Choices','__EFMigrationsHistory');";
+            if ((long)(await check.ExecuteScalarAsync(ct))! != 5)
+                throw new InvalidDataException("Файл не является резервной копией базы диалогов.");
+            var options = new DbContextOptionsBuilder<DialogueDbContext>().UseSqlite(connection).Options;
+            await using var db = new DialogueDbContext(options);
+            var known = db.Database.GetMigrations().ToArray();
+            var applied = (await db.Database.GetAppliedMigrationsAsync(ct)).ToArray();
+            if (applied.Length == 0 || !applied.SequenceEqual(known.Take(applied.Length), StringComparer.Ordinal))
+                throw new InvalidDataException("В копии отсутствует совместимая последовательность миграций приложения.");
+            if (applied.Length == known.Length)
+            {
+                try { await CheckSchemaAsync(db, ct); }
+                catch (SqliteException error)
+                {
+                    throw new InvalidDataException("Схема резервной копии не соответствует миграциям приложения.", error);
+                }
+            }
+        }
         check.CommandText = "PRAGMA foreign_key_check;";
         await using (var reader = await check.ExecuteReaderAsync(ct))
             if (await reader.ReadAsync(ct)) throw new InvalidDataException("В резервной копии нарушены связи таблиц.");
-        if (!requireApplication) return;
-        check.CommandText = "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name IN ('Dialogues','Characters','Lines','Choices','__EFMigrationsHistory');";
-        if ((long)(await check.ExecuteScalarAsync(ct))! != 5)
-            throw new InvalidDataException("Файл не является резервной копией базы диалогов.");
-        var options = new DbContextOptionsBuilder<DialogueDbContext>().UseSqlite(connection).Options;
-        await using var db = new DialogueDbContext(options);
-        var known = db.Database.GetMigrations().ToArray();
-        var applied = (await db.Database.GetAppliedMigrationsAsync(ct)).ToArray();
-        if (applied.Length == 0 || !applied.SequenceEqual(known.Take(applied.Length), StringComparer.Ordinal))
-            throw new InvalidDataException("В копии отсутствует совместимая последовательность миграций приложения.");
-        if (applied.Length == known.Length)
-        {
-            try { await CheckSchemaAsync(db, ct); }
-            catch (SqliteException error)
-            {
-                throw new InvalidDataException("Схема резервной копии не соответствует миграциям приложения.", error);
-            }
-        }
     }
 
     public async Task<DatabaseRestore> RestoreAsync(string source, CancellationToken ct = default)
@@ -149,8 +153,10 @@ public sealed class DatabaseBackups(string directory, TimeProvider? clock = null
         var options = new DbContextOptionsBuilder<DialogueDbContext>().UseSqlite(reference).Options;
         await using var schema = new DialogueDbContext(options);
         await schema.Database.MigrateAsync(ct);
-        var expected = await ReadSchemaObjectsAsync(reference, ct);
-        var actual = await ReadSchemaObjectsAsync(connection, ct);
+        var tables = schema.Model.GetEntityTypes().Select(entity => entity.GetTableName()!)
+            .Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToArray();
+        var expected = await ReadSchemaObjectsAsync(reference, tables, ct);
+        var actual = await ReadSchemaObjectsAsync(connection, tables, ct);
         foreach (var (name, definition) in expected)
         {
             if (!actual.TryGetValue(name, out var current) || current != definition)
@@ -158,18 +164,60 @@ public sealed class DatabaseBackups(string directory, TimeProvider? clock = null
         }
     }
 
-    private static async Task<Dictionary<string, string>> ReadSchemaObjectsAsync(SqliteConnection connection, CancellationToken ct)
+    private static async Task<Dictionary<string, string>> ReadSchemaObjectsAsync(
+        SqliteConnection connection, IReadOnlyList<string> tables, CancellationToken ct)
     {
         using var command = connection.CreateCommand();
         command.CommandText = "SELECT type, name, sql FROM sqlite_schema WHERE type IN ('index', 'trigger') AND sql IS NOT NULL;";
         var objects = new Dictionary<string, string>(StringComparer.Ordinal);
+        await using (var reader = await command.ExecuteReaderAsync(ct))
+        {
+            while (await reader.ReadAsync(ct))
+            {
+                var definition = string.Join(' ', reader.GetString(2).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)).TrimEnd(';');
+                objects.Add($"{reader.GetString(0)} {reader.GetString(1)}", definition);
+            }
+        }
+        foreach (var table in tables)
+        {
+            var columns = await ReadSchemaRowsAsync(connection,
+                "SELECT name, type, \"notnull\", dflt_value, pk, hidden FROM pragma_table_xinfo($name) ORDER BY name;", table, ct);
+            var foreignKeys = (await ReadSchemaRowsAsync(connection,
+                "SELECT id, seq, \"table\", \"from\", \"to\", on_update, on_delete, match FROM pragma_foreign_key_list($name) ORDER BY id, seq;", table, ct))
+                .GroupBy(row => row[0], StringComparer.Ordinal)
+                .Select(group => JsonSerializer.Serialize(group.Select(row => row.Skip(1))))
+                .Order(StringComparer.Ordinal).ToArray();
+            var uniqueKeys = new List<string>();
+            var indexes = await ReadSchemaRowsAsync(connection,
+                "SELECT name, origin FROM pragma_index_list($name) WHERE origin IN ('pk', 'u');", table, ct);
+            foreach (var index in indexes)
+            {
+                var parts = await ReadSchemaRowsAsync(connection,
+                    "SELECT seqno, name, \"desc\", coll, \"key\" FROM pragma_index_xinfo($name) WHERE \"key\" = 1 ORDER BY seqno;", index[0]!, ct);
+                uniqueKeys.Add(JsonSerializer.Serialize(new { origin = index[1], parts }));
+            }
+            objects.Add($"table {table}", JsonSerializer.Serialize(new
+                { columns, foreignKeys, uniqueKeys = uniqueKeys.Order(StringComparer.Ordinal).ToArray() }));
+        }
+        return objects;
+    }
+
+    private static async Task<List<string?[]>> ReadSchemaRowsAsync(
+        SqliteConnection connection, string sql, string name, CancellationToken ct)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = sql;
+        command.Parameters.AddWithValue("$name", name);
+        var rows = new List<string?[]>();
         await using var reader = await command.ExecuteReaderAsync(ct);
         while (await reader.ReadAsync(ct))
         {
-            var definition = string.Join(' ', reader.GetString(2).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)).TrimEnd(';');
-            objects.Add($"{reader.GetString(0)} {reader.GetString(1)}", definition);
+            var row = new string?[reader.FieldCount];
+            for (var index = 0; index < row.Length; index++)
+                row[index] = reader.IsDBNull(index) ? null : Convert.ToString(reader.GetValue(index), CultureInfo.InvariantCulture);
+            rows.Add(row);
         }
-        return objects;
+        return rows;
     }
 
     private void Prune(BackupKind kind, int keep)
