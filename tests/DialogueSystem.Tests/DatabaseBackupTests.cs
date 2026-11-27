@@ -162,6 +162,37 @@ public sealed class DatabaseBackupTests
         Assert.Empty(Directory.GetFiles(directory, "*.partial*"));
     }
 
+    [Theory]
+    [InlineData("DROP TRIGGER Lines_Revision_Update;")]
+    [InlineData("DROP TRIGGER Lines_Revision_Update; CREATE TRIGGER Lines_Revision_Update AFTER UPDATE ON Lines BEGIN SELECT 1; END;")]
+    [InlineData("DROP INDEX IX_Choices_DialogueId_SourceLineId_Position;")]
+    [InlineData("DROP INDEX IX_Choices_DialogueId_SourceLineId_Position; CREATE INDEX IX_Choices_DialogueId_SourceLineId_Position ON Choices (DialogueId, SourceLineId, Position);")]
+    public async Task RejectsMissingOrChangedTriggersAndIndexesBeforeChangingTheLiveDatabase(string change)
+    {
+        using var data = new DialogueTestData();
+        await using var app = data.Start();
+        var backups = app.Services.GetRequiredService<DatabaseBackups>();
+        var backup = await backups.CreateAsync(BackupKind.Manual);
+        var epoch = app.Services.GetRequiredService<SessionEpoch>().Value;
+        using var scope = app.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<DialogueDbContext>();
+        var titles = await db.Dialogues.OrderBy(dialogue => dialogue.Id).Select(dialogue => dialogue.Title).ToArrayAsync();
+        await using (var connection = new SqliteConnection($"Data Source={backup.Path};Pooling=False"))
+        {
+            await connection.OpenAsync();
+            using var command = connection.CreateCommand();
+            command.CommandText = change;
+            await command.ExecuteNonQueryAsync();
+        }
+        await Assert.ThrowsAsync<InvalidDataException>(() => DatabaseBackups.ValidateAsync(backup.Path));
+        await Assert.ThrowsAsync<InvalidDataException>(() => backups.RestoreAsync(backup.Path));
+        Assert.Equal(titles, await db.Dialogues.OrderBy(dialogue => dialogue.Id).Select(dialogue => dialogue.Title).ToArrayAsync());
+        var directory = Path.GetDirectoryName(data.DatabasePath)!;
+        Assert.Equal(epoch, await File.ReadAllTextAsync(Path.Combine(directory, "session-epoch")));
+        Assert.Empty(Directory.GetDirectories(Path.Combine(directory, "backups"), "before-restore-*"));
+        Assert.Empty(Directory.GetFiles(directory, "*.partial*"));
+    }
+
     [Fact]
     public async Task DailyBackupIsIdempotentAndAutomaticRetentionKeepsManualCopies()
     {

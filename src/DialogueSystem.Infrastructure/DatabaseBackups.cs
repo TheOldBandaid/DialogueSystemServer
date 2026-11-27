@@ -139,6 +139,37 @@ public sealed class DatabaseBackups(string directory, TimeProvider? clock = null
         await db.Previews.AsNoTracking().Take(1).ToListAsync(ct);
         await db.DialogueRevisions.AsNoTracking().Take(1).ToListAsync(ct);
         await db.Set<DialogueSystem.Domain.PreviewHistoryEntry>().AsNoTracking().Take(1).ToListAsync(ct);
+        await CheckSchemaObjectsAsync((SqliteConnection)db.Database.GetDbConnection(), ct);
+    }
+
+    private static async Task CheckSchemaObjectsAsync(SqliteConnection connection, CancellationToken ct)
+    {
+        await using var reference = new SqliteConnection("Data Source=:memory:;Pooling=False;Foreign Keys=True");
+        await reference.OpenAsync(ct);
+        var options = new DbContextOptionsBuilder<DialogueDbContext>().UseSqlite(reference).Options;
+        await using var schema = new DialogueDbContext(options);
+        await schema.Database.MigrateAsync(ct);
+        var expected = await ReadSchemaObjectsAsync(reference, ct);
+        var actual = await ReadSchemaObjectsAsync(connection, ct);
+        foreach (var (name, definition) in expected)
+        {
+            if (!actual.TryGetValue(name, out var current) || current != definition)
+                throw new InvalidDataException($"В резервной копии отсутствует или изменён служебный объект {name}.");
+        }
+    }
+
+    private static async Task<Dictionary<string, string>> ReadSchemaObjectsAsync(SqliteConnection connection, CancellationToken ct)
+    {
+        using var command = connection.CreateCommand();
+        command.CommandText = "SELECT type, name, sql FROM sqlite_schema WHERE type IN ('index', 'trigger') AND sql IS NOT NULL;";
+        var objects = new Dictionary<string, string>(StringComparer.Ordinal);
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            var definition = string.Join(' ', reader.GetString(2).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)).TrimEnd(';');
+            objects.Add($"{reader.GetString(0)} {reader.GetString(1)}", definition);
+        }
+        return objects;
     }
 
     private void Prune(BackupKind kind, int keep)
