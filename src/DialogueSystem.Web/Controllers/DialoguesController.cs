@@ -79,7 +79,9 @@ public sealed class DialoguesController(IDialogueCatalog catalog) : ControllerBa
     }
 
     [HttpPost("import")]
+    [RequestSizeLimit(DialogueLimits.MaximumImportBytes)]
     [ProducesResponseType(StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status413PayloadTooLarge)]
     public async Task<ActionResult<DialogueSummary>> Import(DialogueDocument document, CancellationToken cancellationToken)
     {
         var created = await catalog.ImportAsync(document, cancellationToken);

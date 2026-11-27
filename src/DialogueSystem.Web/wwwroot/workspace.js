@@ -27,7 +27,8 @@ export async function api(path, method = "GET", body) {
   if (!response.ok) {
     const validation = result?.errors;
     const details = validation && Object.values(validation).flat().join(" ");
-    const message = response.status === 401 ? "Проверьте имя пользователя и пароль или войдите заново." :
+    const message = response.status === 413 ? "Сервер отклонил запрос из-за ограничения размера данных." :
+      response.status === 401 ? "Проверьте имя пользователя и пароль или войдите заново." :
       result?.detail || details || `Запрос отклонён (HTTP ${response.status}).`;
     throw Object.assign(new Error(message), { status: response.status, result });
   }

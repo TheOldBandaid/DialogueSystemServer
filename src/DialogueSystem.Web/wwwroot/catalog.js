@@ -96,7 +96,13 @@ byId("new-dialogue").onsubmit = run(async event => {
   location.assign(dialogueUrl(created.id));
 });
 byId("import-dialogue").onsubmit = run(async event => {
-  const raw = await event.currentTarget.elements.file.files[0].text();
+  const form = event.currentTarget;
+  const file = form.elements.file.files[0];
+  if (!file) throw new Error("Выберите файл JSON.");
+  const maximumBytes = Number(form.dataset.maximumBytes);
+  if (file.size > maximumBytes)
+    throw new Error(`Размер файла превышает допустимые ${maximumBytes / (1024 * 1024)} МиБ.`);
+  const raw = await file.text();
   let document;
   try {
     document = JSON.parse(raw.replace(/^\uFEFF/, ""));

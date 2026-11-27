@@ -1,3 +1,4 @@
+@using DialogueSystem.Application
 @{
     Layout = "_Layout";
     ViewData["Title"] = "Каталог диалогов";
@@ -15,8 +16,8 @@
         <label>Название диалога <input name="title" maxlength="160" required></label>
         <button>Создать диалог</button>
       </form>
-      <form id="import-dialogue">
-        <label>Файл JSON <input name="file" type="file" accept=".json,application/json" required></label>
+      <form id="import-dialogue" data-maximum-bytes="@DialogueLimits.MaximumImportBytes">
+        <label>Файл JSON до @(DialogueLimits.MaximumImportBytes / (1024 * 1024)) МиБ <input name="file" type="file" accept=".json,application/json" required></label>
         <button>Загрузить диалог</button>
       </form>
     </div>
